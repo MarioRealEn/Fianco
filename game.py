@@ -139,7 +139,7 @@ class FiancoGame:
                         captures.append([i, j, land_row, land_col])
         return np.array(captures, dtype=np.int8)
 
-    def get_possible_moves_piece(self, player):
+    def get_all_possible_moves(self, player):
         moves = []
         direction = 1 if player == 1 else -1
         positions = np.argwhere(self.board_state == player)
@@ -167,7 +167,7 @@ class FiancoGame:
         if captures.size > 0:
             return captures, True
         else:
-            moves = self.get_possible_moves_piece(player)
+            moves = self.get_all_possible_moves(player)
             return moves, False
 
     def make_move(self, from_row, from_col, to_row, to_col):
@@ -202,9 +202,6 @@ class FiancoGame:
             all_moves, is_capture = self.get_valid_moves(self.current_player)
             # Filter moves for the selected piece
             self.valid_moves = all_moves[np.all(all_moves[:, 0:2] == [row, col], axis=1)]
-            if is_capture:
-                # If capturing is mandatory, filter out non-capture moves
-                self.valid_moves = self.valid_moves[np.abs(self.valid_moves[:, 0] - self.valid_moves[:, 2]) == 2]
         else:
             self.selected_piece = None
             self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
