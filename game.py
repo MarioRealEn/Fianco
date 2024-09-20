@@ -6,7 +6,10 @@ import sys
 ROWS, COLS = 9, 9
 SQUARE_SIZE = 60  # Size of each square in pixels
 MARGIN = 50       # Margin size for labels
-WIDTH = SQUARE_SIZE * COLS + MARGIN * 2
+MOVE_PANEL_WIDTH = 200  # Width of the move history panel
+BUTTON_WIDTH = 80
+BUTTON_HEIGHT = 30
+WIDTH = SQUARE_SIZE * COLS + MARGIN * 2 + MOVE_PANEL_WIDTH
 HEIGHT = SQUARE_SIZE * ROWS + MARGIN * 2
 
 # RGB Colors
@@ -21,7 +24,7 @@ class FiancoGame:
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption('Fianco Game')
         self.clock = pygame.time.Clock()
-        self.board_state = np.array([
+        self.initial_board_state = np.array([
             [ 1,  1,  1,  1,  1,  1,  1,  1,  1],
             [ 0,  1,  0,  0,  0,  0,  0,  1,  0],
             [ 0,  0,  1,  0,  0,  0,  1,  0,  0],
@@ -32,11 +35,45 @@ class FiancoGame:
             [ 0, -1,  0,  0,  0,  0,  0, -1,  0],
             [-1, -1, -1, -1, -1, -1, -1, -1, -1]
         ], dtype=np.int8)
+        self.board_state = self.initial_board_state.copy()
         self.current_player = -1
         self.selected_piece = None
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+        self.move_history = []
         self.game_over = False
         self.font = pygame.font.SysFont(None, 24)
+        self.undo_stack = []
+        self.redo_stack = []
+
+        # Buttons
+        # Adjusted buttons to fit four buttons (Undo, Redo, Reset, Export)
+        button_x = MARGIN * 2 + COLS * SQUARE_SIZE + (MOVE_PANEL_WIDTH - BUTTON_WIDTH * 2 - 10) // 2
+        button_y = MARGIN
+
+        self.undo_button_rect = pygame.Rect(
+            button_x,
+            button_y,
+            BUTTON_WIDTH,
+            BUTTON_HEIGHT
+        )
+        self.redo_button_rect = pygame.Rect(
+            button_x + BUTTON_WIDTH + 10,
+            button_y,
+            BUTTON_WIDTH,
+            BUTTON_HEIGHT
+        )
+        self.reset_button_rect = pygame.Rect(
+            button_x,
+            button_y + BUTTON_HEIGHT + 10,
+            BUTTON_WIDTH,
+            BUTTON_HEIGHT
+        )
+        self.export_button_rect = pygame.Rect(
+            button_x + BUTTON_WIDTH + 10,
+            button_y + BUTTON_HEIGHT + 10,
+            BUTTON_WIDTH,
+            BUTTON_HEIGHT
+        )
 
     def draw_board(self):
         self.screen.fill(BOARD_COLOR)
@@ -52,8 +89,7 @@ class FiancoGame:
                 pygame.draw.rect(self.screen, GRAY, rect, 1)
         # Draw pieces using NumPy operations
         player_positions = np.argwhere(self.board_state != 0)
-        for pos in player_positions:
-            row, col = pos
+        for row, col in player_positions:
             piece = self.board_state[row, col]
             color = BLACK if piece == 1 else WHITE
             pygame.draw.circle(
@@ -77,20 +113,16 @@ class FiancoGame:
             )
         # Draw coordinates
         self.draw_coordinates()
+        # Draw move history
+        self.draw_move_history()
+        # Draw buttons
+        self.draw_buttons()
         pygame.display.flip()
 
     def draw_coordinates(self):
-        # Draw column labels (A-I)
+        # Draw column labels (A-I) at the bottom only
         for col in range(COLS):
             label = self.font.render(chr(ord('A') + col), True, BLACK)
-            label_rect = label.get_rect(
-                center=(
-                    MARGIN + col * SQUARE_SIZE + SQUARE_SIZE // 2,
-                    MARGIN // 2
-                )
-            )
-            self.screen.blit(label, label_rect)
-            # Bottom labels
             label_rect = label.get_rect(
                 center=(
                     MARGIN + col * SQUARE_SIZE + SQUARE_SIZE // 2,
@@ -98,7 +130,7 @@ class FiancoGame:
                 )
             )
             self.screen.blit(label, label_rect)
-        # Draw row labels (1-9)
+        # Draw row labels (1-9) on the left side only
         for row in range(ROWS):
             label = self.font.render(str(ROWS - row), True, BLACK)
             label_rect = label.get_rect(
@@ -108,14 +140,59 @@ class FiancoGame:
                 )
             )
             self.screen.blit(label, label_rect)
-            # Right labels
-            label_rect = label.get_rect(
-                center=(
-                    WIDTH - MARGIN // 2,
-                    MARGIN + row * SQUARE_SIZE + SQUARE_SIZE // 2
+
+    def draw_move_history(self):
+        # Background for the move history panel
+        panel_rect = pygame.Rect(
+            MARGIN * 2 + COLS * SQUARE_SIZE,
+            0,
+            MOVE_PANEL_WIDTH,
+            HEIGHT
+        )
+        pygame.draw.rect(self.screen, WHITE, panel_rect)
+        # Draw the moves
+        start_y = MARGIN + BUTTON_HEIGHT * 2 + 30
+        line_height = 20
+        moves_to_show = self.move_history[-(HEIGHT // line_height - 4):]  # Show last N moves
+        for i, move in enumerate(moves_to_show):
+            move_text = self.font.render(move, True, BLACK)
+            self.screen.blit(
+                move_text,
+                (
+                    MARGIN * 2 + COLS * SQUARE_SIZE + 10,
+                    start_y + i * line_height
                 )
             )
-            self.screen.blit(label, label_rect)
+
+    def draw_buttons(self):
+        # Draw undo button
+        pygame.draw.rect(self.screen, GRAY, self.undo_button_rect)
+        undo_text = self.font.render('Undo', True, BLACK)
+        undo_text_rect = undo_text.get_rect(center=self.undo_button_rect.center)
+        self.screen.blit(undo_text, undo_text_rect)
+        # Draw redo button
+        pygame.draw.rect(self.screen, GRAY, self.redo_button_rect)
+        redo_text = self.font.render('Redo', True, BLACK)
+        redo_text_rect = redo_text.get_rect(center=self.redo_button_rect.center)
+        self.screen.blit(redo_text, redo_text_rect)
+        # Draw reset button
+        pygame.draw.rect(self.screen, GRAY, self.reset_button_rect)
+        reset_text = self.font.render('Reset', True, BLACK)
+        reset_text_rect = reset_text.get_rect(center=self.reset_button_rect.center)
+        self.screen.blit(reset_text, reset_text_rect)
+        # Draw export button
+        pygame.draw.rect(self.screen, GRAY, self.export_button_rect)
+        export_text = self.font.render('Export', True, BLACK)
+        export_text_rect = export_text.get_rect(center=self.export_button_rect.center)
+        self.screen.blit(export_text, export_text_rect)
+
+    def coord_to_notation(self, row, col):
+        col_label = chr(ord('A') + col)
+        row_label = str(ROWS - row)
+        return col_label + row_label
+
+    def get_player_label(self, player):
+        return 'White' if player == -1 else 'Black'
 
     def get_possible_captures(self, player):
         captures = []
@@ -171,24 +248,53 @@ class FiancoGame:
             return moves, False
 
     def make_move(self, from_row, from_col, to_row, to_col):
+        # Save current state for undo
+        self.undo_stack.append((self.board_state.copy(), self.current_player, self.move_history.copy()))
+        # Clear redo stack
+        self.redo_stack.clear()
         player = self.current_player
         self.board_state[from_row, from_col] = 0
         self.board_state[to_row, to_col] = player
+        # Record the move with player information
+        from_notation = self.coord_to_notation(from_row, from_col)
+        to_notation = self.coord_to_notation(to_row, to_col)
+        player_label = self.get_player_label(player)
+        move_str = f"{player_label}: {from_notation}->{to_notation}"
+        self.move_history.append(move_str)
         if abs(from_row - to_row) == 2:
             captured_row = (from_row + to_row) // 2
             captured_col = (from_col + to_col) // 2
             self.board_state[captured_row, captured_col] = 0
 
+    def undo_move(self):
+        if self.undo_stack:
+            # Save current state for redo
+            self.redo_stack.append((self.board_state.copy(), self.current_player, self.move_history.copy()))
+            # Restore the previous state
+            self.board_state, self.current_player, self.move_history = self.undo_stack.pop()
+            self.selected_piece = None
+            self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+            self.game_over = False
+
+    def redo_move(self):
+        if self.redo_stack:
+            # Save current state for undo
+            self.undo_stack.append((self.board_state.copy(), self.current_player, self.move_history.copy()))
+            # Restore the next state
+            self.board_state, self.current_player, self.move_history = self.redo_stack.pop()
+            self.selected_piece = None
+            self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+            self.game_over = False
+
     def check_for_win(self):
-        def get_player_label(player):
-            return 'White' if player == -1 else 'Black'
         player = self.current_player
         target_row = 8 if player == 1 else 0
         if player in self.board_state[target_row]:
             self.draw_board()
             self.game_over = True
             font = pygame.font.SysFont(None, 48)
-            text = font.render(f'{get_player_label(player)} Player wins!', True, BLACK)
+            player_label = self.get_player_label(player)
+            text = font.render(f'{player_label} Player wins!', True, BLACK)
             text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
             self.screen.blit(text, text_rect)
             pygame.display.flip()
@@ -202,6 +308,9 @@ class FiancoGame:
             all_moves, is_capture = self.get_valid_moves(self.current_player)
             # Filter moves for the selected piece
             self.valid_moves = all_moves[np.all(all_moves[:, 0:2] == [row, col], axis=1)]
+            if is_capture:
+                # If capturing is mandatory, filter out non-capture moves
+                self.valid_moves = self.valid_moves[np.abs(self.valid_moves[:, 0] - self.valid_moves[:, 2]) == 2]
         else:
             self.selected_piece = None
             self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
@@ -210,26 +319,66 @@ class FiancoGame:
         if self.game_over:
             return
         x, y = pos
+        # Check if click is on undo button
+        if self.undo_button_rect.collidepoint(x, y):
+            self.undo_move()
+            return
+        # Check if click is on redo button
+        if self.redo_button_rect.collidepoint(x, y):
+            self.redo_move()
+            return
+        # Check if click is on reset button
+        if self.reset_button_rect.collidepoint(x, y):
+            self.reset_game()
+            return
+        # Check if click is on export button
+        if self.export_button_rect.collidepoint(x, y):
+            self.export_position()
+            return
         col = (x - MARGIN) // SQUARE_SIZE
         row = (y - MARGIN) // SQUARE_SIZE
         if 0 <= row < ROWS and 0 <= col < COLS:
             if self.selected_piece:
-                for move in self.valid_moves:
-                    if move[2] == row and move[3] == col:
-                        from_row, from_col = self.selected_piece
-                        self.make_move(from_row, from_col, row, col)
-                        self.selected_piece = None
-                        self.valid_moves = []
-                        self.check_for_win()
-                        self.current_player *= -1
-                        return
-                self.select_piece(row, col)
+                move_indices = np.where((self.valid_moves[:, 2] == row) & (self.valid_moves[:, 3] == col))[0]
+                if move_indices.size > 0:
+                    move = self.valid_moves[move_indices[0]]
+                    from_row, from_col = self.selected_piece
+                    self.make_move(from_row, from_col, row, col)
+                    self.selected_piece = None
+                    self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+                    self.check_for_win()
+                    self.current_player *= -1
+                    return
+                else:
+                    self.select_piece(row, col)
             else:
                 self.select_piece(row, col)
         else:
             # Clicked outside the board
             self.selected_piece = None
-            self.valid_moves = []
+            self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+
+    def reset_game(self):
+        # Reset the board state
+        self.board_state = self.initial_board_state.copy()
+        self.current_player = -1
+        self.selected_piece = None
+        self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+        self.move_history = []
+        self.undo_stack = []
+        self.redo_stack = []
+        self.game_over = False
+
+    def export_position(self):
+        # Export the current position and move history to a text file
+        with open('fianco_export.txt', 'w') as f:
+            f.write('Board State:\n')
+            for row in self.board_state:
+                f.write(' '.join(map(str, row)) + '\n')
+            f.write('\nMove History:\n')
+            for move in self.move_history:
+                f.write(move + '\n')
+        print('Position exported to fianco_export.txt')
 
     def run_game(self):
         while True:
@@ -245,4 +394,5 @@ class FiancoGame:
 if __name__ == "__main__":
     game = FiancoGame()
     game.run_game()
+
 
