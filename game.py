@@ -1,6 +1,7 @@
 import pygame
 import numpy as np
 import sys
+from controller import Controller  # Import the Controller class
 
 # Constants
 ROWS, COLS = 9, 9
@@ -12,11 +13,17 @@ BUTTON_HEIGHT = 30
 WIDTH = SQUARE_SIZE * COLS + MARGIN * 2 + MOVE_PANEL_WIDTH
 HEIGHT = SQUARE_SIZE * ROWS + MARGIN * 2
 
-# RGB Colors
-BOARD_COLOR = (235, 190, 150)
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-GRAY = (211, 211, 211)
+# Colors
+LIGHT_SQUARE_COLOR = (240, 217, 181)
+DARK_SQUARE_COLOR = (181, 136, 99)
+BUTTON_COLOR = (70, 130, 180)
+BUTTON_HOVER_COLOR = (100, 149, 237)
+TEXT_COLOR = (0, 0, 0)
+HIGHLIGHT_COLOR = (255, 255, 0)
+VALID_MOVE_COLOR = (34, 139, 34)
+MOVE_PANEL_BG = (245, 245, 245)
+SELECTED_PIECE_COLOR = (255, 215, 0)
+MARGIN_COLOR = (255, 255, 255)  # White color for margin
 
 class FiancoGame:
     def __init__(self):
@@ -39,14 +46,32 @@ class FiancoGame:
         self.current_player = -1
         self.selected_piece = None
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
-        self.move_history = []
+        self.white_moves = []
+        self.black_moves = []
         self.game_over = False
-        self.font = pygame.font.SysFont(None, 24)
+        self.font = pygame.font.SysFont('Arial', 18)
+        self.large_font = pygame.font.SysFont('Arial', 24, bold=True)
         self.undo_stack = []
         self.redo_stack = []
 
+        # Player types: 'human' or 'ai'
+        self.player_types = {
+            -1: 'human',  # White player
+            1: 'human'    # Black player
+        }
+        # To set AI players, change 'human' to 'ai' for the desired player
+        # Example: self.player_types[1] = 'ai'  # Black player is controlled by AI
+
+        # Controllers for AI players
+        self.controllers = {
+            -1: None,
+            1: None
+        }
+        for player, p_type in self.player_types.items():
+            if p_type == 'ai':
+                self.controllers[player] = Controller(player)
+
         # Buttons
-        # Adjusted buttons to fit four buttons (Undo, Redo, Reset, Export)
         button_x = MARGIN * 2 + COLS * SQUARE_SIZE + (MOVE_PANEL_WIDTH - BUTTON_WIDTH * 2 - 10) // 2
         button_y = MARGIN
 
@@ -76,8 +101,9 @@ class FiancoGame:
         )
 
     def draw_board(self):
-        self.screen.fill(BOARD_COLOR)
-        # Draw grid
+        # Fill background with margin color
+        self.screen.fill(MARGIN_COLOR)
+        # Draw the board with a checkered pattern
         for row in range(ROWS):
             for col in range(COLS):
                 rect = pygame.Rect(
@@ -86,12 +112,38 @@ class FiancoGame:
                     SQUARE_SIZE,
                     SQUARE_SIZE
                 )
-                pygame.draw.rect(self.screen, GRAY, rect, 1)
-        # Draw pieces using NumPy operations
+                if (row + col) % 2 == 0:
+                    color = LIGHT_SQUARE_COLOR
+                else:
+                    color = DARK_SQUARE_COLOR
+                pygame.draw.rect(self.screen, color, rect)
+
+        # Highlight selected piece
+        if self.selected_piece:
+            row, col = self.selected_piece
+            highlight_rect = pygame.Rect(
+                MARGIN + col * SQUARE_SIZE,
+                MARGIN + row * SQUARE_SIZE,
+                SQUARE_SIZE,
+                SQUARE_SIZE
+            )
+            pygame.draw.rect(self.screen, SELECTED_PIECE_COLOR, highlight_rect, 4)
+        # Highlight valid moves
+        for move in self.valid_moves:
+            _, _, row, col = move
+            center = (
+                MARGIN + col * SQUARE_SIZE + SQUARE_SIZE // 2,
+                MARGIN + row * SQUARE_SIZE + SQUARE_SIZE // 2
+            )
+            pygame.draw.circle(self.screen, VALID_MOVE_COLOR, center, 10)
+        # Draw pieces
         player_positions = np.argwhere(self.board_state != 0)
         for row, col in player_positions:
             piece = self.board_state[row, col]
-            color = BLACK if piece == 1 else WHITE
+            if piece == 1:
+                color = (0, 0, 0)
+            else:
+                color = (255, 255, 255)
             pygame.draw.circle(
                 self.screen, color,
                 (
@@ -99,17 +151,6 @@ class FiancoGame:
                     MARGIN + row * SQUARE_SIZE + SQUARE_SIZE // 2
                 ),
                 SQUARE_SIZE // 2 - 10
-            )
-        # Highlight valid moves
-        for move in self.valid_moves:
-            _, _, row, col = move
-            pygame.draw.circle(
-                self.screen, BLACK,
-                (
-                    MARGIN + col * SQUARE_SIZE + SQUARE_SIZE // 2,
-                    MARGIN + row * SQUARE_SIZE + SQUARE_SIZE // 2
-                ),
-                10
             )
         # Draw coordinates
         self.draw_coordinates()
@@ -122,7 +163,7 @@ class FiancoGame:
     def draw_coordinates(self):
         # Draw column labels (A-I) at the bottom only
         for col in range(COLS):
-            label = self.font.render(chr(ord('A') + col), True, BLACK)
+            label = self.font.render(chr(ord('A') + col), True, TEXT_COLOR)
             label_rect = label.get_rect(
                 center=(
                     MARGIN + col * SQUARE_SIZE + SQUARE_SIZE // 2,
@@ -132,7 +173,7 @@ class FiancoGame:
             self.screen.blit(label, label_rect)
         # Draw row labels (1-9) on the left side only
         for row in range(ROWS):
-            label = self.font.render(str(ROWS - row), True, BLACK)
+            label = self.font.render(str(ROWS - row), True, TEXT_COLOR)
             label_rect = label.get_rect(
                 center=(
                     MARGIN // 2,
@@ -149,42 +190,47 @@ class FiancoGame:
             MOVE_PANEL_WIDTH,
             HEIGHT
         )
-        pygame.draw.rect(self.screen, WHITE, panel_rect)
-        # Draw the moves
-        start_y = MARGIN + BUTTON_HEIGHT * 2 + 30
+        pygame.draw.rect(self.screen, MOVE_PANEL_BG, panel_rect)
+        # Column positions
+        col1_x = MARGIN * 2 + COLS * SQUARE_SIZE + 10
+        col2_x = col1_x + MOVE_PANEL_WIDTH // 2 - 10
+        start_y = MARGIN + BUTTON_HEIGHT * 2 + 50
         line_height = 20
-        moves_to_show = self.move_history[-(HEIGHT // line_height - 4):]  # Show last N moves
-        for i, move in enumerate(moves_to_show):
-            move_text = self.font.render(move, True, BLACK)
-            self.screen.blit(
-                move_text,
-                (
-                    MARGIN * 2 + COLS * SQUARE_SIZE + 10,
-                    start_y + i * line_height
-                )
-            )
+        max_moves = max(len(self.white_moves), len(self.black_moves))
+        # Draw column headers
+        header_white = self.font.render("White", True, TEXT_COLOR)
+        header_black = self.font.render("Black", True, TEXT_COLOR)
+        self.screen.blit(header_white, (col1_x, start_y - line_height))
+        self.screen.blit(header_black, (col2_x, start_y - line_height))
+        for i in range(max_moves):
+            if i < len(self.white_moves):
+                move_text = self.font.render(self.white_moves[i], True, TEXT_COLOR)
+                self.screen.blit(move_text, (col1_x, start_y + i * line_height))
+            if i < len(self.black_moves):
+                move_text = self.font.render(self.black_moves[i], True, TEXT_COLOR)
+                self.screen.blit(move_text, (col2_x, start_y + i * line_height))
 
     def draw_buttons(self):
+        mouse_pos = pygame.mouse.get_pos()
         # Draw undo button
-        pygame.draw.rect(self.screen, GRAY, self.undo_button_rect)
-        undo_text = self.font.render('Undo', True, BLACK)
-        undo_text_rect = undo_text.get_rect(center=self.undo_button_rect.center)
-        self.screen.blit(undo_text, undo_text_rect)
+        self.draw_button(self.undo_button_rect, 'Undo', mouse_pos)
         # Draw redo button
-        pygame.draw.rect(self.screen, GRAY, self.redo_button_rect)
-        redo_text = self.font.render('Redo', True, BLACK)
-        redo_text_rect = redo_text.get_rect(center=self.redo_button_rect.center)
-        self.screen.blit(redo_text, redo_text_rect)
+        self.draw_button(self.redo_button_rect, 'Redo', mouse_pos)
         # Draw reset button
-        pygame.draw.rect(self.screen, GRAY, self.reset_button_rect)
-        reset_text = self.font.render('Reset', True, BLACK)
-        reset_text_rect = reset_text.get_rect(center=self.reset_button_rect.center)
-        self.screen.blit(reset_text, reset_text_rect)
+        self.draw_button(self.reset_button_rect, 'Reset', mouse_pos)
         # Draw export button
-        pygame.draw.rect(self.screen, GRAY, self.export_button_rect)
-        export_text = self.font.render('Export', True, BLACK)
-        export_text_rect = export_text.get_rect(center=self.export_button_rect.center)
-        self.screen.blit(export_text, export_text_rect)
+        self.draw_button(self.export_button_rect, 'Export', mouse_pos)
+
+    def draw_button(self, rect, text, mouse_pos):
+        if rect.collidepoint(mouse_pos):
+            color = BUTTON_HOVER_COLOR
+        else:
+            color = BUTTON_COLOR
+        # Draw rounded rectangle
+        pygame.draw.rect(self.screen, color, rect, border_radius=10)
+        button_text = self.font.render(text, True, TEXT_COLOR)
+        button_text_rect = button_text.get_rect(center=rect.center)
+        self.screen.blit(button_text, button_text_rect)
 
     def coord_to_notation(self, row, col):
         col_label = chr(ord('A') + col)
@@ -249,18 +295,25 @@ class FiancoGame:
 
     def make_move(self, from_row, from_col, to_row, to_col):
         # Save current state for undo
-        self.undo_stack.append((self.board_state.copy(), self.current_player, self.move_history.copy()))
+        self.undo_stack.append((
+            self.board_state.copy(),
+            self.current_player,
+            self.white_moves.copy(),
+            self.black_moves.copy()
+        ))
         # Clear redo stack
         self.redo_stack.clear()
         player = self.current_player
         self.board_state[from_row, from_col] = 0
         self.board_state[to_row, to_col] = player
-        # Record the move with player information
+        # Record the move without player information
         from_notation = self.coord_to_notation(from_row, from_col)
         to_notation = self.coord_to_notation(to_row, to_col)
-        player_label = self.get_player_label(player)
-        move_str = f"{player_label}: {from_notation}->{to_notation}"
-        self.move_history.append(move_str)
+        move_str = f"{from_notation}->{to_notation}"
+        if player == -1:
+            self.white_moves.append(move_str)
+        else:
+            self.black_moves.append(move_str)
         if abs(from_row - to_row) == 2:
             captured_row = (from_row + to_row) // 2
             captured_col = (from_col + to_col) // 2
@@ -269,9 +322,14 @@ class FiancoGame:
     def undo_move(self):
         if self.undo_stack:
             # Save current state for redo
-            self.redo_stack.append((self.board_state.copy(), self.current_player, self.move_history.copy()))
+            self.redo_stack.append((
+                self.board_state.copy(),
+                self.current_player,
+                self.white_moves.copy(),
+                self.black_moves.copy()
+            ))
             # Restore the previous state
-            self.board_state, self.current_player, self.move_history = self.undo_stack.pop()
+            self.board_state, self.current_player, self.white_moves, self.black_moves = self.undo_stack.pop()
             self.selected_piece = None
             self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
             self.game_over = False
@@ -279,9 +337,14 @@ class FiancoGame:
     def redo_move(self):
         if self.redo_stack:
             # Save current state for undo
-            self.undo_stack.append((self.board_state.copy(), self.current_player, self.move_history.copy()))
+            self.undo_stack.append((
+                self.board_state.copy(),
+                self.current_player,
+                self.white_moves.copy(),
+                self.black_moves.copy()
+            ))
             # Restore the next state
-            self.board_state, self.current_player, self.move_history = self.redo_stack.pop()
+            self.board_state, self.current_player, self.white_moves, self.black_moves = self.redo_stack.pop()
             self.selected_piece = None
             self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
             self.game_over = False
@@ -292,9 +355,7 @@ class FiancoGame:
         if player in self.board_state[target_row]:
             self.draw_board()
             self.game_over = True
-            font = pygame.font.SysFont(None, 48)
-            player_label = self.get_player_label(player)
-            text = font.render(f'{player_label} Player wins!', True, BLACK)
+            text = self.large_font.render(f'{self.get_player_label(player)} Wins!', True, TEXT_COLOR)
             text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
             self.screen.blit(text, text_rect)
             pygame.display.flip()
@@ -335,6 +396,9 @@ class FiancoGame:
         if self.export_button_rect.collidepoint(x, y):
             self.export_position()
             return
+        # If it's AI's turn, ignore clicks
+        if self.player_types[self.current_player] == 'ai':
+            return
         col = (x - MARGIN) // SQUARE_SIZE
         row = (y - MARGIN) // SQUARE_SIZE
         if 0 <= row < ROWS and 0 <= col < COLS:
@@ -364,7 +428,8 @@ class FiancoGame:
         self.current_player = -1
         self.selected_piece = None
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
-        self.move_history = []
+        self.white_moves = []
+        self.black_moves = []
         self.undo_stack = []
         self.redo_stack = []
         self.game_over = False
@@ -375,15 +440,41 @@ class FiancoGame:
             f.write('Board State:\n')
             for row in self.board_state:
                 f.write(' '.join(map(str, row)) + '\n')
-            f.write('\nMove History:\n')
-            for move in self.move_history:
+            f.write('\nWhite Moves:\n')
+            for move in self.white_moves:
+                f.write(move + '\n')
+            f.write('\nBlack Moves:\n')
+            for move in self.black_moves:
                 f.write(move + '\n')
         print('Position exported to fianco_export.txt')
+
+    def handle_ai_move(self):
+        controller = self.controllers[self.current_player]
+        if controller is None:
+            return
+        try:
+            move = controller.get_move(self.board_state)
+        except NotImplementedError as e:
+            print(e)
+            self.game_over = True
+            return
+        from_row, from_col, to_row, to_col = move
+        self.make_move(from_row, from_col, to_row, to_col)
+        self.selected_piece = None
+        self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+        self.check_for_win()
+        self.current_player *= -1
 
     def run_game(self):
         while True:
             self.clock.tick(60)
             self.draw_board()
+            if self.game_over:
+                pygame.quit() #IM NOT SURE ABOUT THIS...
+                sys.exit()
+            # If it's AI's turn
+            if self.player_types[self.current_player] == 'ai':
+                self.handle_ai_move()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
@@ -393,6 +484,10 @@ class FiancoGame:
 
 if __name__ == "__main__":
     game = FiancoGame()
+    # Example: Set Black player to be controlled by AI
+    game.player_types[1] = 'ai'  # Black player is AI
+    # Initialize controllers for AI players
+    for player, p_type in game.player_types.items():
+        if p_type == 'ai':
+            game.controllers[player] = Controller(player)
     game.run_game()
-
-
