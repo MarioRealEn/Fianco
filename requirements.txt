@@ -1,0 +1,5 @@
+# Fianco/requirements.txt
+
+pygame
+numpy
+maturin

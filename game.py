@@ -23,7 +23,7 @@ HIGHLIGHT_COLOR = (255, 255, 0)
 VALID_MOVE_COLOR = (34, 139, 34)
 MOVE_PANEL_BG = (245, 245, 245)
 SELECTED_PIECE_COLOR = (255, 215, 0)
-MARGIN_COLOR = (255, 255, 255)  # White color for margin
+MARGIN_COLOR = (150, 150, 150)  # White color for margin
 
 class FiancoGame:
     def __init__(self):
@@ -57,7 +57,7 @@ class FiancoGame:
         # Player types: 'human' or 'ai'
         self.player_types = {
             -1: 'human',  # White player
-            1: 'human'    # Black player
+            1: 'ai'    # Black player
         }
         # To set AI players, change 'human' to 'ai' for the desired player
         # Example: self.player_types[1] = 'ai'  # Black player is controlled by AI
@@ -131,11 +131,14 @@ class FiancoGame:
         # Highlight valid moves
         for move in self.valid_moves:
             _, _, row, col = move
+            row = int(row)
+            col = int(col)
             center = (
                 MARGIN + col * SQUARE_SIZE + SQUARE_SIZE // 2,
                 MARGIN + row * SQUARE_SIZE + SQUARE_SIZE // 2
             )
             pygame.draw.circle(self.screen, VALID_MOVE_COLOR, center, 10)
+            # print(row, col, center)
         # Draw pieces
         player_positions = np.argwhere(self.board_state != 0)
         for row, col in player_positions:
@@ -318,6 +321,7 @@ class FiancoGame:
             captured_row = (from_row + to_row) // 2
             captured_col = (from_col + to_col) // 2
             self.board_state[captured_row, captured_col] = 0
+        self.draw_board()
 
     def undo_move(self):
         if self.undo_stack:
@@ -375,6 +379,7 @@ class FiancoGame:
         else:
             self.selected_piece = None
             self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+        self.draw_board()
 
     def handle_click(self, pos):
         if self.game_over:
@@ -405,11 +410,11 @@ class FiancoGame:
             if self.selected_piece:
                 move_indices = np.where((self.valid_moves[:, 2] == row) & (self.valid_moves[:, 3] == col))[0]
                 if move_indices.size > 0:
-                    move = self.valid_moves[move_indices[0]]
+                    # move = self.valid_moves[move_indices[0]]
                     from_row, from_col = self.selected_piece
+                    self.selected_piece = None #This goes before the make_move because make_move draws the board
+                    self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4) #Same for this
                     self.make_move(from_row, from_col, row, col)
-                    self.selected_piece = None
-                    self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
                     self.check_for_win()
                     self.current_player *= -1
                     return
@@ -433,13 +438,16 @@ class FiancoGame:
         self.undo_stack = []
         self.redo_stack = []
         self.game_over = False
+        self.draw_board()
 
     def export_position(self):
         # Export the current position and move history to a text file
         with open('fianco_export.txt', 'w') as f:
             f.write('Board State:\n')
+            f.write('board = np.array([\n')
             for row in self.board_state:
-                f.write(' '.join(map(str, row)) + '\n')
+                f.write('[' + ', '.join(map(str, row)) + '],\n')
+            f.write('], dtype=np.int8)\n\n')
             f.write('\nWhite Moves:\n')
             for move in self.white_moves:
                 f.write(move + '\n')
@@ -459,16 +467,17 @@ class FiancoGame:
             self.game_over = True
             return
         from_row, from_col, to_row, to_col = move
-        self.make_move(from_row, from_col, to_row, to_col)
+        # pygame.time.wait(500)  # Delay for better visualization
         self.selected_piece = None
+        self.make_move(from_row, from_col, to_row, to_col)
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
         self.check_for_win()
         self.current_player *= -1
 
     def run_game(self):
+        self.draw_board()
         while True:
             self.clock.tick(60)
-            self.draw_board()
             if self.game_over:
                 pygame.quit() #IM NOT SURE ABOUT THIS...
                 sys.exit()
@@ -491,3 +500,4 @@ if __name__ == "__main__":
         if p_type == 'ai':
             game.controllers[player] = Controller(player)
     game.run_game()
+
