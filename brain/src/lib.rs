@@ -40,7 +40,6 @@ fn get_best_move(
         player,
         MIN_SCORE,
         MAX_SCORE,
-        player,
     );
 
     println!("Best move python: {:?}", best_move);
@@ -82,7 +81,7 @@ fn evaluate_board_python(board: &PyArray2<i8>, player: i8) -> i32 {
         .map(|row| row.to_vec())
         .collect();
 
-    evaluate_board(&board_state, player)
+    evaluate_board(&board_state)
 }
 
 fn negamax(
@@ -91,14 +90,13 @@ fn negamax(
     player: i8,
     mut alpha: i32,
     beta: i32,
-    maximizer: i8,
 ) -> (i32, Option<(usize, usize, usize, usize)>) {
     if depth == 0 || is_game_over(board, player) {
-        let eval = evaluate_board(board, player);
+        let eval = -player as i32 * evaluate_board(board);
         return (eval, None);
     }
 
-    let mut max_eval = MIN_SCORE;
+    let mut max_eval = -std::i32::MAX;
     let mut best_move = None;
 
     let moves = get_valid_moves(board, player);
@@ -107,17 +105,12 @@ fn negamax(
         let mut new_board = board.clone();
         make_move(&mut new_board, player, m);
 
-        let (eval, _) = negamax(&new_board, depth - 1, -player, -beta, -alpha, maximizer);
+        let (eval, _) = negamax(&new_board, depth - 1, -player, -beta, -alpha);
         let eval = -eval;
 
         if eval > max_eval {
             max_eval = eval;
             best_move = Some(m);
-            //REMOVE THIS
-            if eval == MAX_SCORE {
-                // println!("Move with max_score{:?}, {:?}", m, best_move);
-            }
-            // -----
         }
         alpha = max(alpha, eval);
         if alpha >= beta {
@@ -125,7 +118,7 @@ fn negamax(
         }
     }
     println!("Best move negamax: {:?}", best_move);
-    (max_eval, best_move)
+    (-player as i32 * max_eval, best_move)
 }
 
 fn get_valid_moves(board: &Vec<Vec<i8>>, player: i8) -> Vec<(usize, usize, usize, usize)> {
@@ -235,40 +228,35 @@ fn make_move(
     }
 }
 
-fn evaluate_board(board: &Vec<Vec<i8>>, player: i8) -> i32 {
-    // Simple evaluation function: material count + positional advantage
-    if is_game_over(board, player) { //It is important to check if the opponent has won instead of the other player, because when the position is achieved and we evaluate it, is the turn of the loser player.
+fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
+    if is_game_over(board, 1) {
+        return MAX_SCORE;
+    } 
+    if is_game_over(board, -1) {
         return MIN_SCORE;
     }
+    // Calculate the score based on the maximizer's perspective
     let mut score = 0;
     for i in 0..ROWS {
         for j in 0..COLS {
-            if board[i][j] == player {
-                score += 10;
-                // Encourage advancing pieces
-                if player == 1 {
-                    score += i as i32;
-                } else {
+            match board[i][j] {
+                1 => {
+                    score += 10;
                     score += (ROWS - i - 1) as i32;
-                }
-                // Encourage lateral pieces
-                score += (j as i32 -4).abs();
-            } else if board[i][j] == -player {
-                score -= 10;
-                // Penalize opponent's advanced pieces
-                if player == 1 {
-                    score -= (ROWS - i - 1) as i32;
-                    
-                } else {
+                    score += (j as i32 - 4).abs();
+                },
+                -1 => {
+                    score -= 10;
                     score -= i as i32;
-                }
-                // Penalize opponent's lateral pieces
-                score -= (j as i32 -4).abs();
+                    score -= (j as i32 - 4).abs();
+                },
+                _ => (),
             }
         }
     }
     score
 }
+
 
 fn is_game_over(board: &Vec<Vec<i8>>, player: i8) -> bool {
     // Check if any of player's pieces reached the opposite end

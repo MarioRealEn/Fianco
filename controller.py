@@ -18,6 +18,7 @@ class Controller:
 
         try:
             best_score, from_row, from_col, to_row, to_col = get_best_move(board_state, player, depth)
+            print(f"Current eval: {best_score}")
             return from_row, from_col, to_row, to_col
         except ValueError:
             self.game.export_position()
