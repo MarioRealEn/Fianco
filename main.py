@@ -12,7 +12,7 @@ def main():
     # Initialize controllers for AI players
     for player, p_type in fianco.player_types.items():
         if p_type == 'ai':
-            fianco.controllers[player] = Controller(player)
+            fianco.controllers[player] = Controller(player, fianco)
     fianco.run_game()
 
 if __name__ == "__main__":

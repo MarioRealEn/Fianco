@@ -2,8 +2,9 @@ import numpy as np
 from fianco_brain import get_best_move  # Import the Rust AI function
 
 class Controller:
-    def __init__(self, player):
+    def __init__(self, player, game):
         self.player = player  # -1 for White, 1 for Black
+        self.game = game
 
     def get_move(self, board_state):
         # Ensure the board_state is a NumPy array of type int8
@@ -19,6 +20,7 @@ class Controller:
             best_score, from_row, from_col, to_row, to_col = get_best_move(board_state, player, depth)
             return from_row, from_col, to_row, to_col
         except ValueError:
+            self.game.export_position()
             raise NotImplementedError("AI has no valid moves.")
         
     def get_move_no_ai(self, board_state):

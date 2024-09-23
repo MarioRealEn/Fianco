@@ -43,10 +43,13 @@ fn get_best_move(
         player,
     );
 
+    println!("Best move python: {:?}", best_move);
+
     // Return the best move and evaluation score if available
     if let Some((from_row, from_col, to_row, to_col)) = best_move {
         Ok((best_score, from_row, from_col, to_row, to_col))
     } else {
+        println!("{}", best_score);
         Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "No valid moves available for the AI.",
         ))
@@ -110,13 +113,18 @@ fn negamax(
         if eval > max_eval {
             max_eval = eval;
             best_move = Some(m);
+            //REMOVE THIS
+            if eval == MAX_SCORE {
+                // println!("Move with max_score{:?}, {:?}", m, best_move);
+            }
+            // -----
         }
         alpha = max(alpha, eval);
         if alpha >= beta {
             break; // Beta cutoff
         }
     }
-
+    println!("Best move negamax: {:?}", best_move);
     (max_eval, best_move)
 }
 

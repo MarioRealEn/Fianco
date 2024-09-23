@@ -80,7 +80,7 @@ class FiancoGame:
         }
         for player, p_type in self.player_types.items():
             if p_type == 'ai':
-                self.controllers[player] = Controller(player)
+                self.controllers[player] = Controller(player, self)
 
         # Buttons
         button_x = MARGIN * 2 + COLS * SQUARE_SIZE + (MOVE_PANEL_WIDTH - BUTTON_WIDTH * 2 - 10) // 2
