@@ -6,6 +6,8 @@ use std::cmp::max;
 
 const ROWS: usize = 9;
 const COLS: usize = 9;
+const MAX_SCORE: i32 = 1_000_000;
+const MIN_SCORE: i32 = -MAX_SCORE;
 
 #[pyfunction]
 fn get_best_move(
@@ -13,7 +15,7 @@ fn get_best_move(
     board: &PyArray2<i8>,
     player: i8,
     depth: i32,
-) -> PyResult<(usize, usize, usize, usize)> {
+) -> PyResult<(i32, usize, usize, usize, usize)> {
     // Safely access the board data
     let board_readonly = board.readonly();
     let board_state = board_readonly.as_array();
@@ -32,18 +34,18 @@ fn get_best_move(
         .collect();
 
     // Call the Negamax algorithm
-    let (_best_score, best_move) = negamax(
+    let (best_score, best_move) = negamax(
         &board_state,
         depth,
         player,
-        -std::i32::MAX,
-        std::i32::MAX,
+        MIN_SCORE,
+        MAX_SCORE,
         player,
     );
 
-    // Return the best move if available
+    // Return the best move and evaluation score if available
     if let Some((from_row, from_col, to_row, to_col)) = best_move {
-        Ok((from_row, from_col, to_row, to_col))
+        Ok((best_score, from_row, from_col, to_row, to_col))
     } else {
         Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "No valid moves available for the AI.",
@@ -51,6 +53,34 @@ fn get_best_move(
     }
 }
 
+#[pyfunction]
+fn get_valid_moves_python(
+    board: &PyArray2<i8>,
+    player: i8,
+) -> PyResult<Vec<(usize, usize, usize, usize)>> {
+    // Convert the ndarray to Vec<Vec<i8>>
+    let board_readonly = board.readonly();
+    let board_state: Vec<Vec<i8>> = board_readonly
+        .as_array()
+        .outer_iter()
+        .map(|row| row.to_vec())
+        .collect();
+
+    Ok(get_valid_moves(&board_state, player))
+}
+
+#[pyfunction]
+fn evaluate_board_python(board: &PyArray2<i8>, player: i8) -> i32 {
+    // Convert the ndarray to Vec<Vec<i8>>
+    let board_readonly = board.readonly();
+    let board_state: Vec<Vec<i8>> = board_readonly
+        .as_array()
+        .outer_iter()
+        .map(|row| row.to_vec())
+        .collect();
+
+    evaluate_board(&board_state, player)
+}
 
 fn negamax(
     board: &Vec<Vec<i8>>,
@@ -61,11 +91,11 @@ fn negamax(
     maximizer: i8,
 ) -> (i32, Option<(usize, usize, usize, usize)>) {
     if depth == 0 || is_game_over(board, player) {
-        let eval = evaluate_board(board, maximizer);
+        let eval = evaluate_board(board, player);
         return (eval, None);
     }
 
-    let mut max_eval = -std::i32::MAX;
+    let mut max_eval = MIN_SCORE;
     let mut best_move = None;
 
     let moves = get_valid_moves(board, player);
@@ -146,6 +176,8 @@ fn get_possible_captures(
     captures
 }
 
+
+
 fn get_all_possible_moves(
     board: &Vec<Vec<i8>>,
     player: i8,
@@ -195,23 +227,10 @@ fn make_move(
     }
 }
 
-#[pyfunction]
-fn evaluate_board_python(board: &PyArray2<i8>, player: i8) -> i32 {
-    // Convert the ndarray to Vec<Vec<i8>>
-    let board_readonly = board.readonly();
-    let board_state: Vec<Vec<i8>> = board_readonly
-        .as_array()
-        .outer_iter()
-        .map(|row| row.to_vec())
-        .collect();
-
-    evaluate_board(&board_state, player)
-}
-
 fn evaluate_board(board: &Vec<Vec<i8>>, player: i8) -> i32 {
     // Simple evaluation function: material count + positional advantage
-    if get_valid_moves(board, player).is_empty()|is_winner(board, -player) { //It is important to check if the opponent has won instead of the other player, because when the position is achieved and we evaluate it, is the turn of the loser player.
-        return -std::i32::MAX;
+    if is_game_over(board, player) { //It is important to check if the opponent has won instead of the other player, because when the position is achieved and we evaluate it, is the turn of the loser player.
+        return MIN_SCORE;
     }
     let mut score = 0;
     for i in 0..ROWS {
@@ -245,7 +264,7 @@ fn evaluate_board(board: &Vec<Vec<i8>>, player: i8) -> i32 {
 
 fn is_game_over(board: &Vec<Vec<i8>>, player: i8) -> bool {
     // Check if any of player's pieces reached the opposite end
-    if is_winner(board, player) {
+    if is_winner(board, -player) {
         return true;
     }
     // Or no valid moves left
@@ -266,6 +285,7 @@ fn is_winner(board: &Vec<Vec<i8>>, player: i8) -> bool {
 fn fianco_brain(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_best_move, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_board_python, m)?)?;
+    m.add_function(wrap_pyfunction!(get_valid_moves_python, m)?)?;
     Ok(())
 }
 

@@ -31,6 +31,17 @@ class FiancoGame:
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption('Fianco Game')
         self.clock = pygame.time.Clock()
+        # self.initial_board_state = np.array([
+        #     [1, 0, 0, 0, 0, 0, 1, 1, 0],
+        #     [1, 1, 1, 1, 1, 1, 0, 1, -1],
+        #     [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        #     [0, 0, 1, 0, 0, 0, 0, 0, 0],
+        #     [0, 0, 0, 0, -1, 0, 0, 0, 0],
+        #     [0, 0, 0, 0, -1, 0, 0, 0, 0],
+        #     [0, 0, 0, -1, 0, 0, 0, 0, 0],
+        #     [1, -1, 0, 0, 0, 0, 0, -1, 0],
+        #     [0, -1, -1, 0, 0, -1, -1, -1, -1]
+        # ], dtype=np.int8)
         self.initial_board_state = np.array([
             [ 1,  1,  1,  1,  1,  1,  1,  1,  1],
             [ 0,  1,  0,  0,  0,  0,  0,  1,  0],
@@ -57,7 +68,7 @@ class FiancoGame:
         # Player types: 'human' or 'ai'
         self.player_types = {
             -1: 'human',  # White player
-            1: 'ai'    # Black player
+            1: 'human'    # Black player
         }
         # To set AI players, change 'human' to 'ai' for the desired player
         # Example: self.player_types[1] = 'ai'  # Black player is controlled by AI

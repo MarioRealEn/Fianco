@@ -8,11 +8,11 @@ from controller import Controller
 def main():
     fianco = game.FiancoGame()
     # Example: Set Black player to be controlled by AI
-    # fianco.player_types[0] = 'ai'  # Black player is AI
-    # # Initialize controllers for AI players
-    # for player, p_type in fianco.player_types.items():
-    #     if p_type == 'ai':
-    #         fianco.controllers[player] = Controller(player)
+    fianco.player_types[1] = 'ai'  # Black player is AI
+    # Initialize controllers for AI players
+    for player, p_type in fianco.player_types.items():
+        if p_type == 'ai':
+            fianco.controllers[player] = Controller(player)
     fianco.run_game()
 
 if __name__ == "__main__":

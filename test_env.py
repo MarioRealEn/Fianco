@@ -1,5 +1,5 @@
 import numpy as np
-from fianco_brain import get_best_move, evaluate_board_python  # Import the Rust AI function
+from fianco_brain import get_best_move, evaluate_board_python, get_valid_moves_python  # Import the Rust AI function
 
 # board = np.array([
 #             [1, 0, 0, 0, 0, 0, 1, 1, 1],
@@ -46,10 +46,10 @@ board = np.array([
             [0, 0, 0, 0, -1, 0, 0, 0, 0],
             [0, 0, 0, 0, -1, 0, 0, 0, 0],
             [0, 0, 0, -1, 0, 0, 0, 0, 0],
-            [0, -1, 0, 0, 0, 0, 0, -1, 0],
-            [1, -1, -1, 0, 0, -1, -1, -1, -1]
+            [1, -1, 0, 0, 0, 0, 0, -1, 0],
+            [0, -1, -1, 0, 0, -1, -1, -1, -1]
         ], dtype=np.int8)
 
-
-# print(get_best_move(board, 1, 6))
-print(evaluate_board_python(board, -1))
+# print(get_valid_moves_python(board, 1))
+print(get_best_move(board, 1, 6))
+# print(evaluate_board_python(board, 1))

@@ -16,7 +16,7 @@ class Controller:
         depth = 6  # Adjust search depth as needed
 
         try:
-            from_row, from_col, to_row, to_col = get_best_move(board_state, player, depth)
+            best_score, from_row, from_col, to_row, to_col = get_best_move(board_state, player, depth)
             return from_row, from_col, to_row, to_col
         except ValueError:
             raise NotImplementedError("AI has no valid moves.")
