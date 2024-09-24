@@ -1,5 +1,5 @@
 import numpy as np
-from fianco_brain import get_best_move  # Import the Rust AI function
+from fianco_brain import get_best_move, evaluate_board_python  # Import the Rust AI function
 
 class Controller:
     def __init__(self, player, game):
@@ -19,6 +19,7 @@ class Controller:
         try:
             best_score, from_row, from_col, to_row, to_col = get_best_move(board_state, player, depth)
             print(f"Current eval: {best_score}")
+            print(f"Board eval: {evaluate_board_python(board_state)}")
             return from_row, from_col, to_row, to_col
         except ValueError:
             self.game.export_position()

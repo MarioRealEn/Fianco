@@ -1,4 +1,4 @@
-use numpy::{IntoPyArray, PyArray2};
+use numpy::PyArray2;
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
@@ -34,13 +34,15 @@ fn get_best_move(
         .collect();
 
     // Call the Negamax algorithm
-    let (best_score, best_move) = negamax(
+    let (mut best_score, best_move) = negamax(
         &board_state,
         depth,
         player,
         MIN_SCORE,
         MAX_SCORE,
     );
+
+    best_score = -player as i32 * best_score;
 
     println!("Best move python: {:?}", best_move);
 
@@ -72,7 +74,7 @@ fn get_valid_moves_python(
 }
 
 #[pyfunction]
-fn evaluate_board_python(board: &PyArray2<i8>, player: i8) -> i32 {
+fn evaluate_board_python(board: &PyArray2<i8>) -> i32 {
     // Convert the ndarray to Vec<Vec<i8>>
     let board_readonly = board.readonly();
     let board_state: Vec<Vec<i8>> = board_readonly
@@ -113,12 +115,12 @@ fn negamax(
             best_move = Some(m);
         }
         alpha = max(alpha, eval);
-        if alpha >= beta {
+        if eval >= beta {
             break; // Beta cutoff
         }
     }
-    println!("Best move negamax: {:?}", best_move);
-    (-player as i32 * max_eval, best_move)
+    // println!("Best move negamax: {:?}", best_move);
+    (max_eval, best_move)
 }
 
 fn get_valid_moves(board: &Vec<Vec<i8>>, player: i8) -> Vec<(usize, usize, usize, usize)> {
@@ -240,12 +242,12 @@ fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
     for i in 0..ROWS {
         for j in 0..COLS {
             match board[i][j] {
-                1 => {
+                -1 => {
                     score += 10;
                     score += (ROWS - i - 1) as i32;
                     score += (j as i32 - 4).abs();
                 },
-                -1 => {
+                1 => {
                     score -= 10;
                     score -= i as i32;
                     score -= (j as i32 - 4).abs();
