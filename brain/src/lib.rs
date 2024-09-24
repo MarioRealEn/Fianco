@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
 use std::cmp::max;
+use std::usize::MIN;
 
 const ROWS: usize = 9;
 const COLS: usize = 9;
@@ -239,26 +240,88 @@ fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
     }
     // Calculate the score based on the maximizer's perspective
     let mut score = 0;
+    let mut length_triangle_white: usize = ROWS-1;
+    let mut length_triangle_black: usize = ROWS-1;
+    let mut triangle_found = false;
     for i in 0..ROWS {
         for j in 0..COLS {
             match board[i][j] {
                 -1 => {
-                    score += 10;
-                    score += (ROWS - i - 1) as i32;
-                    score += (j as i32 - 4).abs();
+                    if triangle_to_win(board, -1, i, j) {
+                        length_triangle_white = std::cmp::min(length_triangle_white, i);
+                        triangle_found = true;
+                        continue;
+                    }
+                    if !triangle_found{
+                        score += 10;
+                        score += (ROWS - i - 1) as i32;
+                        score += (j as i32 - 4).abs();
+                    }
                 },
                 1 => {
-                    score -= 10;
-                    score -= i as i32;
-                    score -= (j as i32 - 4).abs();
+                    if triangle_to_win(board, 1, i, j) {
+                        length_triangle_black = std::cmp::min(length_triangle_black, ROWS - i - 1 as usize);
+                        triangle_found = true;
+                        continue;
+                    }
+                    if !triangle_found{
+                        score -= 10;
+                        score -= i as i32;
+                        score -= (j as i32 - 4).abs();
+                    }
                 },
                 _ => (),
             }
         }
     }
+    
+    if length_triangle_black < length_triangle_white {
+        // println!("Triangle for black");
+        return MIN_SCORE;
+    } else if length_triangle_black > length_triangle_white {
+        // println!("Triangle for white");
+        return MAX_SCORE;
+    }
     score
 }
 
+fn triangle_to_win(board: &Vec<Vec<i8>>, player: i8, i: usize, j: usize) -> bool {
+    let i1: isize;
+    let i2: isize;
+    let mut j1: isize;
+    let mut j2: isize;
+    let i = i as isize;
+    let j = j as isize;
+    let rows = ROWS as isize;
+    let cols = COLS as isize;
+
+    if player == 1 {
+        i1 = i + 1;
+        i2 = rows-1;
+    } else {
+        i1 = 0;
+        if i == 0 {
+            println!("I ES CERO!! {}", i);
+        }
+        i2 = i - 1;
+
+    }
+
+    for n in i1..=i2 {
+        let delta = player as isize * (n - i);
+        j1 = std::cmp::max(0, j - delta);
+        j2 = std::cmp::min(cols-1, j + delta);
+        if j2 < 0 || j1 < 0 {
+            println!("J1 o J2 ES MENOR QUE CERO!! {}, {}", j1, j2);
+        }
+        for m in j1..=j2 {
+            if board[n as usize][m as usize] == -player {
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 fn is_game_over(board: &Vec<Vec<i8>>, player: i8) -> bool {
     // Check if any of player's pieces reached the opposite end

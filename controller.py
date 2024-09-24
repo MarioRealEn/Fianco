@@ -14,7 +14,7 @@ class Controller:
             board_state = board_state.astype(np.int8)
 
         player = self.player
-        depth = 6  # Adjust search depth as needed
+        depth = 7  # Adjust search depth as needed
 
         try:
             best_score, from_row, from_col, to_row, to_col = get_best_move(board_state, player, depth)

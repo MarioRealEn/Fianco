@@ -31,17 +31,6 @@ class FiancoGame:
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption('Fianco Game')
         self.clock = pygame.time.Clock()
-        # self.initial_board_state = np.array([
-        #     [1, 0, 0, 0, 0, 0, 1, 1, 0],
-        #     [1, 1, 1, 1, 1, 1, 0, 1, -1],
-        #     [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #     [0, 0, 1, 0, 0, 0, 0, 0, 0],
-        #     [0, 0, 0, 0, -1, 0, 0, 0, 0],
-        #     [0, 0, 0, 0, -1, 0, 0, 0, 0],
-        #     [0, 0, 0, -1, 0, 0, 0, 0, 0],
-        #     [1, -1, 0, 0, 0, 0, 0, -1, 0],
-        #     [0, -1, -1, 0, 0, -1, -1, -1, -1]
-        # ], dtype=np.int8)
         self.initial_board_state = np.array([
             [ 1,  1,  1,  1,  1,  1,  1,  1,  1],
             [ 0,  1,  0,  0,  0,  0,  0,  1,  0],
@@ -302,10 +291,10 @@ class FiancoGame:
     def get_valid_moves(self, player):
         captures = self.get_possible_captures(player)
         if captures.size > 0:
-            return captures, True
+            return captures
         else:
             moves = self.get_all_possible_moves(player)
-            return moves, False
+            return moves
 
     def make_move(self, from_row, from_col, to_row, to_col):
         # Save current state for undo
@@ -381,12 +370,9 @@ class FiancoGame:
     def select_piece(self, row, col):
         if self.board_state[row, col] == self.current_player:
             self.selected_piece = (row, col)
-            all_moves, is_capture = self.get_valid_moves(self.current_player)
+            all_moves = self.get_valid_moves(self.current_player)
             # Filter moves for the selected piece
             self.valid_moves = all_moves[np.all(all_moves[:, 0:2] == [row, col], axis=1)]
-            if is_capture:
-                # If capturing is mandatory, filter out non-capture moves
-                self.valid_moves = self.valid_moves[np.abs(self.valid_moves[:, 0] - self.valid_moves[:, 2]) == 2]
         else:
             self.selected_piece = None
             self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
@@ -480,8 +466,8 @@ class FiancoGame:
         from_row, from_col, to_row, to_col = move
         # pygame.time.wait(500)  # Delay for better visualization
         self.selected_piece = None
-        self.make_move(from_row, from_col, to_row, to_col)
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+        self.make_move(from_row, from_col, to_row, to_col)
         self.check_for_win()
         self.current_player *= -1
 
