@@ -87,6 +87,19 @@ board = np.array([
 [-1, 0, 0, 0, 0, 0, 0, 0, -1],
 ], dtype=np.int8)
 
+
+board = np.array([
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 1, 0, 1, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 1, 0, 0, 0, 0],
+    [0, -1, 0, 0, 0, -1, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+], dtype=np.int8)
+
 # print(get_valid_moves_python(board, 1))
 print(get_best_move(board, -1, 6))
 # print(evaluate_board_python(board, 1))

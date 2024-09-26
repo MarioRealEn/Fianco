@@ -106,9 +106,10 @@ fn negamax(
 
     for m in moves {
         let mut new_board = board.clone();
-        make_move(&mut new_board, player, m);
+        let capture = make_move(&mut new_board, player, m);
+        let new_depth = if capture { depth } else { depth - 1 }; //Captures dont decrease depth
 
-        let (eval, _) = negamax(&new_board, depth - 1, -player, -beta, -alpha);
+        let (eval, _) = negamax(&new_board, new_depth, -player, -beta, -alpha);
         let eval = -eval;
 
         if eval > max_eval {
@@ -214,11 +215,11 @@ fn get_all_possible_moves(
     moves
 }
 
-fn make_move(
+fn make_move( // Returns true if a capture was made
     board: &mut Vec<Vec<i8>>,
     player: i8,
     mv: (usize, usize, usize, usize),
-) {
+) -> bool {
     let (from_row, from_col, to_row, to_col) = mv;
     board[from_row][from_col] = 0;
     board[to_row][to_col] = player;
@@ -228,7 +229,9 @@ fn make_move(
         let captured_row = (from_row + to_row) / 2;
         let captured_col = (from_col + to_col) / 2;
         board[captured_row][captured_col] = 0;
+        return true; // Capture
     }
+    return false; // No capture
 }
 
 fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
