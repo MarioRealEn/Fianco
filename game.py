@@ -26,12 +26,8 @@ SELECTED_PIECE_COLOR = (255, 215, 0)
 MARGIN_COLOR = (150, 150, 150)  # White color for margin
 
 class FiancoGame:
-    def __init__(self):
-        pygame.init()
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption('Fianco Game')
-        self.clock = pygame.time.Clock()
-        self.initial_board_state = np.array([
+    def __init__(self, 
+                 board = np.array([
             [ 1,  1,  1,  1,  1,  1,  1,  1,  1],
             [ 0,  1,  0,  0,  0,  0,  0,  1,  0],
             [ 0,  0,  1,  0,  0,  0,  1,  0,  0],
@@ -41,7 +37,12 @@ class FiancoGame:
             [ 0,  0, -1,  0,  0,  0, -1,  0,  0],
             [ 0, -1,  0,  0,  0,  0,  0, -1,  0],
             [-1, -1, -1, -1, -1, -1, -1, -1, -1]
-        ], dtype=np.int8)
+        ], dtype=np.int8)):
+        pygame.init()
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption('Fianco Game')
+        self.clock = pygame.time.Clock()
+        self.initial_board_state = board
         self.board_state = self.initial_board_state.copy()
         self.current_player = -1
         self.selected_piece = None
@@ -59,8 +60,6 @@ class FiancoGame:
             -1: 'human',  # White player
             1: 'human'    # Black player
         }
-        # To set AI players, change 'human' to 'ai' for the desired player
-        # Example: self.player_types[1] = 'ai'  # Black player is controlled by AI
 
         # Controllers for AI players
         self.controllers = {

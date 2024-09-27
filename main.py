@@ -6,6 +6,17 @@ from controller import Controller
 
 
 def main():
+    # initial_board_state = np.array([
+    #         [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    #         [1, 0, 0, 0, 0, 1, 0, 1, 1],
+    #         [1, 1, 0, 1, 0, 0, 1, 1, 1],
+    #         [1, -1, 0, 0, 0, 0, 0, 0, 0],
+    #         [0, 0, -1, 0, 0, 1, 0, 0, 0],
+    #         [0, 0, -1, 0, 0, 0, 0, 0, 0],
+    #         [0, 0, 1, 0, -1, 0, -1, 0, 0],
+    #         [0, 0, 0, 0, 0, 0, 0, -1, 0],
+    #         [0, -1, 0, -1, 0, -1, -1, -1, -1],
+    #         ], dtype=np.int8)
     fianco = game.FiancoGame()
     # Example: Set Black player to be controlled by AI
     fianco.player_types[1] = 'ai'  # Black player is AI

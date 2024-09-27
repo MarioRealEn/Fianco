@@ -34,6 +34,12 @@ fn get_best_move(
         .map(|row| row.to_vec())
         .collect();
 
+    let valid_moves = get_valid_moves(&board_state, player);
+    
+    if valid_moves.len()==1{
+        return Ok((404, valid_moves[0].0, valid_moves[0].1, valid_moves[0].2, valid_moves[0].3));//idk what to do with the eval
+    }
+
     // Call the Negamax algorithm
     let (mut best_score, best_move) = negamax(
         &board_state,
