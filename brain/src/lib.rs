@@ -2,13 +2,34 @@ use numpy::PyArray2;
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
-use std::cmp::max;
-use std::usize::MIN;
+use std::cmp::{max, min};
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
 const ROWS: usize = 9;
 const COLS: usize = 9;
 const MAX_SCORE: i32 = 1_000_000;
 const MIN_SCORE: i32 = -MAX_SCORE;
+
+// Define the possible flags for entries
+#[derive(Debug, Clone, Copy)]
+enum TTFlag {
+    Exact,
+    LowerBound,
+    UpperBound,
+}
+
+// Structure for a transposition table entry
+#[derive(Debug, Clone, Copy)]
+struct TTEntry {
+    best_move: Option<(usize, usize, usize, usize)>,
+    eval: i32,
+    depth: i32,
+    flag: TTFlag,
+}
+
+type TranspositionTable = HashMap<u64, TTEntry>;
 
 #[pyfunction]
 fn get_best_move(
@@ -36,22 +57,32 @@ fn get_best_move(
 
     let valid_moves = get_valid_moves(&board_state, player);
     
-    if valid_moves.len()==1{
-        return Ok((404, valid_moves[0].0, valid_moves[0].1, valid_moves[0].2, valid_moves[0].3));//idk what to do with the eval
+    if valid_moves.len() == 1 {
+        return Ok((
+            404, // Placeholder for evaluation
+            valid_moves[0].0,
+            valid_moves[0].1,
+            valid_moves[0].2,
+            valid_moves[0].3,
+        ));
     }
 
-    // Call the Negamax algorithm
+    // Initialize the Transposition Table
+    let mut tt: TranspositionTable = HashMap::new();
+
+    // Call the Negamax algorithm with the Transposition Table
     let (mut best_score, best_move) = negamax(
         &board_state,
         depth,
         player,
         MIN_SCORE,
         MAX_SCORE,
+        &mut tt,
     );
 
     best_score = -player as i32 * best_score;
 
-    println!("Best move python: {:?}", best_move);
+    println!("Best move negamax: {:?}", best_move);
 
     // Return the best move and evaluation score if available
     if let Some((from_row, from_col, to_row, to_col)) = best_move {
@@ -98,24 +129,65 @@ fn negamax(
     depth: i32,
     player: i8,
     mut alpha: i32,
-    beta: i32,
+    mut beta: i32,
+    tt: &mut TranspositionTable,
 ) -> (i32, Option<(usize, usize, usize, usize)>) {
+    // Generate a unique key for the current board
+    let key = board_to_key(board);
+    let old_alpha = alpha;
+    let mut old_best_move: Option<(usize, usize, usize, usize)> = None;
+
+    // Check if the position is already in the transposition table
+    if let Some(entry) = tt.get(&key) {
+        if entry.depth >= depth {
+            match entry.flag {
+                TTFlag::Exact => return (entry.eval, entry.best_move),
+                TTFlag::LowerBound => alpha = max(alpha, entry.eval),
+                TTFlag::UpperBound => {
+                    // To prevent overflow, ensure that `min` is used correctly
+                    // Note: Ensure you have `use std::cmp::min;` at the top
+
+                    //Chat GPT made this, I'm not sure about it:
+                    // let new_beta = min(beta, entry.score);
+                    // if new_beta < beta {
+                    //     return (entry.score, None);
+                    // }
+
+                    //This is from the class pseudocode:
+                    beta = min(beta, entry.eval);
+                },
+            }
+            if alpha >= beta {
+                return (entry.eval, None);
+            }
+        } 
+        if entry.best_move.is_some() {
+            old_best_move = entry.best_move;
+        }
+    }
+
     if depth == 0 || is_game_over(board, player) {
         let eval = -player as i32 * evaluate_board(board);
         return (eval, None);
     }
 
-    let mut max_eval = -std::i32::MAX;
+    let mut max_eval = -std::i32::MAX; //It is negative infinity and not MIN_SCORE just in case int gets compared with an actual MIN_SCORE
     let mut best_move = None;
 
-    let moves = get_valid_moves(board, player);
+    let mut moves = get_valid_moves(board, player);
+
+    if let Some(best_move_from_tt) = old_best_move {
+        if let Some(pos) = moves.iter().position(|&m| m == best_move_from_tt) {
+            moves.swap(0, pos); // Move the best_move to the front
+        }
+    }
 
     for m in moves {
         let mut new_board = board.clone();
         let capture = make_move(&mut new_board, player, m);
-        let new_depth = if capture { depth } else { depth - 1 }; //Captures dont decrease depth
+        let new_depth = if capture { depth } else { depth - 1 }; // Captures don't decrease depth
 
-        let (eval, _) = negamax(&new_board, new_depth, -player, -beta, -alpha);
+        let (eval, _) = negamax(&new_board, new_depth, -player, -beta, -alpha, tt);
         let eval = -eval;
 
         if eval > max_eval {
@@ -123,12 +195,40 @@ fn negamax(
             best_move = Some(m);
         }
         alpha = max(alpha, eval);
-        if eval >= beta {
+        if alpha >= beta {
             break; // Beta cutoff
         }
     }
-    // println!("Best move negamax: {:?}", best_move);
+
+    // Determine the flag for the transposition table entry
+    let flag = if max_eval <= old_alpha {
+        TTFlag::UpperBound
+    } else if max_eval >= beta {
+        TTFlag::LowerBound
+    } else {
+        TTFlag::Exact
+    };
+
+    // Store the evaluation in the transposition table
+    let entry = TTEntry {
+        best_move,
+        eval: max_eval,
+        depth,
+        flag,
+    };
+    tt.insert(key, entry);
+
     (max_eval, best_move)
+}
+
+fn board_hash(board: &Vec<Vec<i8>>) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    board.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn board_to_key(board: &Vec<Vec<i8>>) -> u64 {
+    board_hash(board)
 }
 
 fn get_valid_moves(board: &Vec<Vec<i8>>, player: i8) -> Vec<(usize, usize, usize, usize)> {
@@ -186,8 +286,6 @@ fn get_possible_captures(
 
     captures
 }
-
-
 
 fn get_all_possible_moves(
     board: &Vec<Vec<i8>>,
@@ -249,8 +347,8 @@ fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
     }
     // Calculate the score based on the maximizer's perspective
     let mut score = 0;
-    let mut length_triangle_white: usize = ROWS-1;
-    let mut length_triangle_black: usize = ROWS-1;
+    let mut length_triangle_white: usize = ROWS - 1;
+    let mut length_triangle_black: usize = ROWS - 1;
     let mut triangle_found = false;
     for i in 0..ROWS {
         for j in 0..COLS {
@@ -261,7 +359,7 @@ fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
                         triangle_found = true;
                         continue;
                     }
-                    if !triangle_found{
+                    if !triangle_found {
                         score += 10;
                         score += (ROWS - i - 1) as i32;
                         score += (j as i32 - 4).abs();
@@ -273,7 +371,7 @@ fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
                         triangle_found = true;
                         continue;
                     }
-                    if !triangle_found{
+                    if !triangle_found {
                         score -= 10;
                         score -= i as i32;
                         score -= (j as i32 - 4).abs();
@@ -295,33 +393,26 @@ fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
 }
 
 fn triangle_to_win(board: &Vec<Vec<i8>>, player: i8, i: usize, j: usize) -> bool {
-    let i1: isize;
-    let i2: isize;
-    let mut j1: isize;
-    let mut j2: isize;
     let i = i as isize;
     let j = j as isize;
     let rows = ROWS as isize;
     let cols = COLS as isize;
 
-    if player == 1 {
-        i1 = i + 1;
-        i2 = rows-1;
+    let (i1, i2) = if player == 1 {
+        (i + 1, rows - 1)
     } else {
-        i1 = 0;
-        // if i == 0 {
-        //     println!("I ES CERO!! {}", i);
-        // }
-        i2 = i - 1;
-
-    }
+        if i == 0 {
+            println!("i is zero: {}", i);
+        }
+        (0, if i > 0 { i - 1 } else { 0 })
+    };
 
     for n in i1..=i2 {
         let delta = player as isize * (n - i);
-        j1 = std::cmp::max(0, j - delta);
-        j2 = std::cmp::min(cols-1, j + delta);
+        let j1 = (j - delta).max(0).min(cols - 1);
+        let j2 = (j + delta).max(0).min(cols - 1);
         if j2 < 0 || j1 < 0 {
-            println!("J1 o J2 ES MENOR QUE CERO!! {}, {}", j1, j2);
+            println!("j1 or j2 is less than zero: {}, {}", j1, j2);
         }
         for m in j1..=j2 {
             if board[n as usize][m as usize] == -player {
@@ -329,7 +420,7 @@ fn triangle_to_win(board: &Vec<Vec<i8>>, player: i8, i: usize, j: usize) -> bool
             }
         }
     }
-    return true;
+    true
 }
 
 fn is_game_over(board: &Vec<Vec<i8>>, player: i8) -> bool {
@@ -350,6 +441,7 @@ fn is_winner(board: &Vec<Vec<i8>>, player: i8) -> bool {
     }
     false
 }
+
 /// A Python module implemented in Rust.
 #[pymodule]
 fn fianco_brain(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -358,4 +450,3 @@ fn fianco_brain(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_valid_moves_python, m)?)?;
     Ok(())
 }
-

@@ -66,9 +66,6 @@ class FiancoGame:
             -1: None,
             1: None
         }
-        for player, p_type in self.player_types.items():
-            if p_type == 'ai':
-                self.controllers[player] = Controller(player, self)
 
         # Buttons
         button_x = MARGIN * 2 + COLS * SQUARE_SIZE + (MOVE_PANEL_WIDTH - BUTTON_WIDTH * 2 - 10) // 2
@@ -361,6 +358,7 @@ class FiancoGame:
             text = self.large_font.render(f'{self.get_player_label(player)} Wins!', True, TEXT_COLOR)
             text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
             self.screen.blit(text, text_rect)
+            self.export_position()
             pygame.display.flip()
             pygame.time.wait(3000)
             pygame.quit()
@@ -398,7 +396,7 @@ class FiancoGame:
             self.export_position()
             return
         # If it's AI's turn, ignore clicks
-        if self.player_types[self.current_player] == 'ai':
+        if self.player_types[self.current_player][0:2] == 'ai':
             return
         col = (x - MARGIN) // SQUARE_SIZE
         row = (y - MARGIN) // SQUARE_SIZE
@@ -478,7 +476,7 @@ class FiancoGame:
                 pygame.quit() #IM NOT SURE ABOUT THIS...
                 sys.exit()
             # If it's AI's turn
-            if self.player_types[self.current_player] == 'ai':
+            if self.player_types[self.current_player][0:2] == 'ai':
                 self.handle_ai_move()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
