@@ -309,9 +309,9 @@ fn triangle_to_win(board: &Vec<Vec<i8>>, player: i8, i: usize, j: usize) -> bool
         i2 = rows-1;
     } else {
         i1 = 0;
-        if i == 0 {
-            println!("I ES CERO!! {}", i);
-        }
+        // if i == 0 {
+        //     println!("I ES CERO!! {}", i);
+        // }
         i2 = i - 1;
 
     }
