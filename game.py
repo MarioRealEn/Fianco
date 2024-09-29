@@ -44,7 +44,7 @@ class FiancoGame:
         self.clock = pygame.time.Clock()
         self.initial_board_state = board
         self.board_state = self.initial_board_state.copy()
-        self.current_player = -1
+        self.current_player = -1 # White: -1, Black: 1
         self.selected_piece = None
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
         self.white_moves = []
@@ -54,6 +54,7 @@ class FiancoGame:
         self.large_font = pygame.font.SysFont('Arial', 24, bold=True)
         self.undo_stack = []
         self.redo_stack = []
+        self.paused = False
 
         # Player types: 'human' or 'ai'
         self.player_types = {
@@ -93,6 +94,13 @@ class FiancoGame:
             button_x + BUTTON_WIDTH + 10,
             button_y + BUTTON_HEIGHT + 10,
             BUTTON_WIDTH,
+            BUTTON_HEIGHT
+        )
+        # Add play/pause button
+        self.play_button_rect = pygame.Rect(
+            button_x,
+            button_y + (BUTTON_HEIGHT + 10) * 2,  # Position it below existing buttons
+            BUTTON_WIDTH * 2 + 10,  # Span two columns
             BUTTON_HEIGHT
         )
 
@@ -193,20 +201,25 @@ class FiancoGame:
         # Column positions
         col1_x = MARGIN * 2 + COLS * SQUARE_SIZE + 10
         col2_x = col1_x + MOVE_PANEL_WIDTH // 2 - 10
-        start_y = MARGIN + BUTTON_HEIGHT * 2 + 50
+        start_y = MARGIN + (BUTTON_HEIGHT + 10) * 3 + 20
         line_height = 20
+        # Calculate how many moves can be displayed
+        max_displayed_moves = (HEIGHT - start_y - line_height) // line_height
         max_moves = max(len(self.white_moves), len(self.black_moves))
+        # Determine the range of moves to display
+        start_index = max(0, max_moves - max_displayed_moves)
         # Draw column headers
         header_white = self.font.render("White", True, TEXT_COLOR)
         header_black = self.font.render("Black", True, TEXT_COLOR)
         self.screen.blit(header_white, (col1_x, start_y - line_height))
         self.screen.blit(header_black, (col2_x, start_y - line_height))
-        for i in range(max_moves):
-            if i < len(self.white_moves):
-                move_text = self.font.render(self.white_moves[i], True, TEXT_COLOR)
+        for idx in range(start_index, max_moves):
+            i = idx - start_index  # Adjusted index for display
+            if idx < len(self.white_moves):
+                move_text = self.font.render(self.white_moves[idx], True, TEXT_COLOR)
                 self.screen.blit(move_text, (col1_x, start_y + i * line_height))
-            if i < len(self.black_moves):
-                move_text = self.font.render(self.black_moves[i], True, TEXT_COLOR)
+            if idx < len(self.black_moves):
+                move_text = self.font.render(self.black_moves[idx], True, TEXT_COLOR)
                 self.screen.blit(move_text, (col2_x, start_y + i * line_height))
 
     def draw_buttons(self):
@@ -219,6 +232,9 @@ class FiancoGame:
         self.draw_button(self.reset_button_rect, 'Reset', mouse_pos)
         # Draw export button
         self.draw_button(self.export_button_rect, 'Export', mouse_pos)
+        # Draw play/pause button
+        button_text = 'Play' if self.paused else 'Pause'
+        self.draw_button(self.play_button_rect, button_text, mouse_pos)
 
     def draw_button(self, rect, text, mouse_pos):
         if rect.collidepoint(mouse_pos):
@@ -333,6 +349,8 @@ class FiancoGame:
             self.selected_piece = None
             self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
             self.game_over = False
+            self.paused = True  # Pause the game after undo
+            self.draw_board()
 
     def redo_move(self):
         if self.redo_stack:
@@ -348,6 +366,9 @@ class FiancoGame:
             self.selected_piece = None
             self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
             self.game_over = False
+            self.paused = True  # Pause the game after redo
+            self.draw_board()
+
 
     def check_for_win(self):
         player = self.current_player
@@ -379,6 +400,11 @@ class FiancoGame:
         if self.game_over:
             return
         x, y = pos
+        # Check if click is on play/pause button
+        if self.play_button_rect.collidepoint(x, y):
+            self.paused = not self.paused  # Toggle paused state
+            self.draw_board()  # Redraw to update button label
+            return
         # Check if click is on undo button
         if self.undo_button_rect.collidepoint(x, y):
             self.undo_move()
@@ -473,10 +499,10 @@ class FiancoGame:
         while True:
             self.clock.tick(60)
             if self.game_over:
-                pygame.quit() #IM NOT SURE ABOUT THIS...
+                pygame.quit()
                 sys.exit()
-            # If it's AI's turn
-            if self.player_types[self.current_player][0:2] == 'ai':
+            # If it's AI's turn and the game is not paused
+            if self.player_types[self.current_player][0:2] == 'ai' and not self.paused:
                 self.handle_ai_move()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:

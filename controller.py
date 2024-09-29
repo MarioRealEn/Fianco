@@ -18,7 +18,9 @@ class Controller:
         depth = self.depth  # Adjust search depth as needed
 
         try:
-            best_score, from_row, from_col, to_row, to_col = get_best_move(board_state, player, depth)
+            pv = get_best_move(board_state, player, depth)
+            best_score = pv[0]
+            from_row, from_col, to_row, to_col = pv[1][0] 
             print(f"Current eval: {best_score}")
             print(f"Board eval: {evaluate_board_python(board_state)}")
             return from_row, from_col, to_row, to_col

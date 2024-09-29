@@ -37,7 +37,7 @@ fn get_best_move(
     board: &PyArray2<i8>,
     player: i8,
     depth: i32,
-) -> PyResult<(i32, usize, usize, usize, usize)> {
+) -> PyResult<(i32, Vec<(usize, usize, usize, usize)>)> {
     // Safely access the board data
     let board_readonly = board.readonly();
     let board_state = board_readonly.as_array();
@@ -60,10 +60,7 @@ fn get_best_move(
     if valid_moves.len() == 1 {
         return Ok((
             404, // Placeholder for evaluation
-            valid_moves[0].0,
-            valid_moves[0].1,
-            valid_moves[0].2,
-            valid_moves[0].3,
+            vec![valid_moves[0]],
         ));
     }
 
@@ -71,7 +68,7 @@ fn get_best_move(
     let mut tt: TranspositionTable = HashMap::new();
 
     // Call the Negamax algorithm with the Transposition Table
-    let (mut best_score, best_move) = negamax(
+    let (mut best_score, pv) = negamax(
         &board_state,
         depth,
         player,
@@ -82,17 +79,17 @@ fn get_best_move(
 
     best_score = -player as i32 * best_score;
 
-    println!("Best move negamax: {:?}", best_move);
+    println!("Principal Variation: {:?}", pv);
 
     // Return the best move and evaluation score if available
-    if let Some((from_row, from_col, to_row, to_col)) = best_move {
-        Ok((best_score, from_row, from_col, to_row, to_col))
+    if let Some(&(_from_row, _from_col, _to_row, _to_col)) = pv.first() {
+        Ok((best_score, pv))
     } else {
-        println!("{}", best_score);
         Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "No valid moves available for the AI.",
         ))
     }
+
 }
 
 #[pyfunction]
@@ -131,7 +128,7 @@ fn negamax(
     mut alpha: i32,
     mut beta: i32,
     tt: &mut TranspositionTable,
-) -> (i32, Option<(usize, usize, usize, usize)>) {
+) -> (i32, Vec<(usize, usize, usize, usize)>) {
     // Generate a unique key for the current board
     let key = board_to_key(board);
     let old_alpha = alpha;
@@ -141,7 +138,14 @@ fn negamax(
     if let Some(entry) = tt.get(&key) {
         if entry.depth >= depth {
             match entry.flag {
-                TTFlag::Exact => return (entry.eval, entry.best_move),
+                TTFlag::Exact => {
+                    let mut pv = Vec::new();
+                    if let Some(best_move) = entry.best_move {
+                        pv.push(best_move);
+                    }
+                    // print!("TT hit: ");
+                    return (entry.eval, pv);
+                },
                 TTFlag::LowerBound => alpha = max(alpha, entry.eval),
                 TTFlag::UpperBound => {
                     // To prevent overflow, ensure that `min` is used correctly
@@ -158,7 +162,7 @@ fn negamax(
                 },
             }
             if alpha >= beta {
-                return (entry.eval, None);
+                return (entry.eval, Vec::new());
             }
         } 
         if entry.best_move.is_some() {
@@ -168,11 +172,11 @@ fn negamax(
 
     if depth == 0 || is_game_over(board, player) {
         let eval = -player as i32 * evaluate_board(board);
-        return (eval, None);
+        return (eval, Vec::new());
     }
 
     let mut max_eval = -std::i32::MAX; //It is negative infinity and not MIN_SCORE just in case int gets compared with an actual MIN_SCORE
-    let mut best_move = None;
+    let mut best_pv = Vec::new();
 
     let mut moves = get_valid_moves(board, player);
 
@@ -187,12 +191,13 @@ fn negamax(
         let capture = make_move(&mut new_board, player, m);
         let new_depth = if capture { depth } else { depth - 1 }; // Captures don't decrease depth
 
-        let (eval, _) = negamax(&new_board, new_depth, -player, -beta, -alpha, tt);
+        let (eval, pv) = negamax(&new_board, new_depth, -player, -beta, -alpha, tt);
         let eval = -eval;
 
         if eval > max_eval {
             max_eval = eval;
-            best_move = Some(m);
+            best_pv = pv;
+            best_pv.insert(0, m); // Prepend the current move to the PV
         }
         alpha = max(alpha, eval);
         if alpha >= beta {
@@ -211,14 +216,14 @@ fn negamax(
 
     // Store the evaluation in the transposition table
     let entry = TTEntry {
-        best_move,
+        best_move: Some(best_pv[0]), // I think maybe best_pv cannot be empty? Fix: if best_pv.is_empty() { None } else { Some(best_pv[0]) }
         eval: max_eval,
         depth,
         flag,
     };
     tt.insert(key, entry);
 
-    (max_eval, best_move)
+    (max_eval, best_pv)
 }
 
 fn board_hash(board: &Vec<Vec<i8>>) -> u64 {
