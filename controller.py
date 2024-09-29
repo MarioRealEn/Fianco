@@ -1,11 +1,12 @@
 import numpy as np
-from fianco_brain import get_best_move, evaluate_board_python  # Import the Rust AI function
+from fianco_brain import FiancoAI  # Import the Rust AI function
 
 class Controller:
     def __init__(self, player, game, depth=6):
         self.player = player  # -1 for White, 1 for Black
         self.game = game
         self.depth = depth
+        self.ai = FiancoAI()
 
     def get_move(self, board_state):
         # Ensure the board_state is a NumPy array of type int8
@@ -18,11 +19,11 @@ class Controller:
         depth = self.depth  # Adjust search depth as needed
 
         try:
-            pv = get_best_move(board_state, player, depth)
+            pv = self.ai.get_best_move(board_state, player, depth)
             best_score = pv[0]
             from_row, from_col, to_row, to_col = pv[1][0] 
             print(f"Current eval: {best_score}")
-            print(f"Board eval: {evaluate_board_python(board_state)}")
+            print(f"Board eval: {self.ai.evaluate_board_python(board_state)}")
             return from_row, from_col, to_row, to_col
         except ValueError:
             self.game.export_position()

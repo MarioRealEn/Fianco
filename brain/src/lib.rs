@@ -1,6 +1,5 @@
 use numpy::PyArray2;
 use pyo3::prelude::*;
-use pyo3::wrap_pyfunction;
 
 use std::cmp::{max, min};
 use std::collections::HashMap;
@@ -31,212 +30,214 @@ struct TTEntry {
 
 type TranspositionTable = HashMap<u64, TTEntry>;
 
-#[pyfunction]
-fn get_best_move(
-    _py: Python,
-    board: &PyArray2<i8>,
-    player: i8,
-    depth: i32,
-) -> PyResult<(i32, Vec<(usize, usize, usize, usize)>)> {
-    // Safely access the board data
-    let board_readonly = board.readonly();
-    let board_state = board_readonly.as_array();
+#[pyclass]
+struct FiancoAI {
+    tt: TranspositionTable,
+}
 
-    // Validate board shape
-    if board_state.shape() != [ROWS, COLS] {
-        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            "Invalid board shape. Expected 9x9 array.",
-        ));
+#[pymethods]
+impl FiancoAI {
+    #[new]
+    fn new() -> Self {
+        FiancoAI {
+            tt: HashMap::new(),
+        }
     }
 
-    // Convert the ndarray to Vec<Vec<i8>>
-    let board_state: Vec<Vec<i8>> = board_state
-        .outer_iter()
-        .map(|row| row.to_vec())
-        .collect();
+    fn get_best_move(
+        &mut self,
+        _py: Python,
+        board: &PyArray2<i8>,
+        player: i8,
+        depth: i32,
+    ) -> PyResult<(i32, Vec<(usize, usize, usize, usize)>)> {
+        // Safely access the board data
+        let board_readonly = board.readonly();
+        let board_state = board_readonly.as_array();
 
-    let valid_moves = get_valid_moves(&board_state, player);
+        // Validate board shape
+        if board_state.shape() != [ROWS, COLS] {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Invalid board shape. Expected 9x9 array.",
+            ));
+        }
+
+        // Convert the ndarray to Vec<Vec<i8>>
+        let mut board_state: Vec<Vec<i8>> = board_state
+            .outer_iter()
+            .map(|row| row.to_vec())
+            .collect();
+
+        // Get valid moves
+        let valid_moves = get_valid_moves(&board_state, player);
+
+        if valid_moves.len() == 1 {
+            return Ok((
+                404, // Placeholder for evaluation
+                vec![valid_moves[0]],
+            ));
+        }
+
+        // Call the Negamax algorithm with the Transposition Table
+        let (mut best_score, pv) = self.negamax(
+            &mut board_state,
+            depth,
+            player,
+            MIN_SCORE,
+            MAX_SCORE,
+        );
+
+        best_score = -player as i32 * best_score;
+
+        println!("Principal Variation: {:?}", pv);
+
+        // Return the best move and evaluation score if available
+        if let Some(&(_from_row, _from_col, _to_row, _to_col)) = pv.first() {
+            Ok((best_score, pv))
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No valid moves available for the AI.",
+            ))
+        }
+    }
+
+    // #[pyfunction]
+    // fn get_valid_moves_python(
+    //     board: &PyArray2<i8>,
+    //     player: i8,
+    // ) -> PyResult<Vec<(usize, usize, usize, usize)>> {
+    //     // Convert the ndarray to Vec<Vec<i8>>
+    //     let board_readonly = board.readonly();
+    //     let board_state: Vec<Vec<i8>> = board_readonly
+    //         .as_array()
+    //         .outer_iter()
+    //         .map(|row| row.to_vec())
+    //         .collect();
+
+    //     Ok(get_valid_moves(&board_state, player))
+    // }
+
+    fn evaluate_board_python(&mut self, board: &PyArray2<i8>) -> i32 {
+        // Convert the ndarray to Vec<Vec<i8>>
+        let board_readonly = board.readonly();
+        let board_state: Vec<Vec<i8>> = board_readonly
+            .as_array()
+            .outer_iter()
+            .map(|row| row.to_vec())
+            .collect();
+
+        evaluate_board(&board_state)
+    }
+}
+
+impl FiancoAI {
+    fn negamax(
+        &mut self,
+        board: &mut Vec<Vec<i8>>,
+        depth: i32,
+        player: i8,
+        mut alpha: i32,
+        mut beta: i32,
+    ) -> (i32, Vec<(usize, usize, usize, usize)>) {
+        // Generate a unique key for the current board
+        let key = board_to_key(board);
+        let old_alpha = alpha;
+        let mut old_best_move: Option<(usize, usize, usize, usize)> = None;
     
-    if valid_moves.len() == 1 {
-        return Ok((
-            404, // Placeholder for evaluation
-            vec![valid_moves[0]],
-        ));
-    }
-
-    // Initialize the Transposition Table
-    let mut tt: TranspositionTable = HashMap::new();
-
-    // Call the Negamax algorithm with the Transposition Table
-    let (mut best_score, pv) = negamax(
-        &board_state,
-        depth,
-        player,
-        MIN_SCORE,
-        MAX_SCORE,
-        &mut tt,
-    );
-
-    best_score = -player as i32 * best_score;
-
-    println!("Principal Variation: {:?}", pv);
-
-    // Return the best move and evaluation score if available
-    if let Some(&(_from_row, _from_col, _to_row, _to_col)) = pv.first() {
-        Ok((best_score, pv))
-    } else {
-        Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            "No valid moves available for the AI.",
-        ))
-    }
-
-}
-
-#[pyfunction]
-fn get_valid_moves_python(
-    board: &PyArray2<i8>,
-    player: i8,
-) -> PyResult<Vec<(usize, usize, usize, usize)>> {
-    // Convert the ndarray to Vec<Vec<i8>>
-    let board_readonly = board.readonly();
-    let board_state: Vec<Vec<i8>> = board_readonly
-        .as_array()
-        .outer_iter()
-        .map(|row| row.to_vec())
-        .collect();
-
-    Ok(get_valid_moves(&board_state, player))
-}
-
-#[pyfunction]
-fn evaluate_board_python(board: &PyArray2<i8>) -> i32 {
-    // Convert the ndarray to Vec<Vec<i8>>
-    let board_readonly = board.readonly();
-    let board_state: Vec<Vec<i8>> = board_readonly
-        .as_array()
-        .outer_iter()
-        .map(|row| row.to_vec())
-        .collect();
-
-    evaluate_board(&board_state)
-}
-
-fn negamax(
-    board: &Vec<Vec<i8>>,
-    depth: i32,
-    player: i8,
-    mut alpha: i32,
-    mut beta: i32,
-    tt: &mut TranspositionTable,
-) -> (i32, Vec<(usize, usize, usize, usize)>) {
-    // Generate a unique key for the current board
-    let key = board_to_key(board);
-    let old_alpha = alpha;
-    let mut old_best_move: Option<(usize, usize, usize, usize)> = None;
-
-    // Check if the position is already in the transposition table
-    if let Some(entry) = tt.get(&key) {
-        if entry.depth >= depth {
-            match entry.flag {
-                TTFlag::Exact => {
-                    let mut pv = Vec::new();
-                    if let Some(best_move) = entry.best_move {
-                        pv.push(best_move);
-                    }
-                    // print!("TT hit: ");
-                    return (entry.eval, pv);
-                },
-                TTFlag::LowerBound => alpha = max(alpha, entry.eval),
-                TTFlag::UpperBound => {
-                    // To prevent overflow, ensure that `min` is used correctly
-                    // Note: Ensure you have `use std::cmp::min;` at the top
-
-                    //Chat GPT made this, I'm not sure about it:
-                    // let new_beta = min(beta, entry.score);
-                    // if new_beta < beta {
-                    //     return (entry.score, None);
-                    // }
-
-                    //This is from the class pseudocode:
-                    beta = min(beta, entry.eval);
-                },
+        // Check if the position is already in the transposition table
+        if let Some(entry) = self.tt.get(&key) {
+            if entry.depth >= depth {
+                match entry.flag {
+                    TTFlag::Exact => {
+                        let mut pv = Vec::new();
+                        if let Some(best_move) = entry.best_move {
+                            pv.push(best_move);
+                        }
+                        return (entry.eval, pv);
+                    },
+                    TTFlag::LowerBound => alpha = max(alpha, entry.eval),
+                    TTFlag::UpperBound => beta = min(beta, entry.eval),
+                }
+                if alpha >= beta {
+                    return (entry.eval, Vec::new());
+                }
             }
+            if entry.best_move.is_some() {
+                old_best_move = entry.best_move;
+            }
+        }
+    
+        // Before any mutable borrows, we can call `is_game_over` and `evaluate_board`
+        if depth == 0 || is_game_over(board, player) {
+            let eval = -player as i32 * evaluate_board(board);
+            return (eval, Vec::new());
+        }
+    
+        let mut max_eval = -std::i32::MAX;
+        let mut best_pv = Vec::new();
+    
+        // Get valid moves
+        let mut moves = get_valid_moves(board, player);
+    
+        if let Some(best_move_from_tt) = old_best_move {
+            if let Some(pos) = moves.iter().position(|&m| m == best_move_from_tt) {
+                moves.swap(0, pos); // Move the best_move to the front
+            }
+        }
+    
+        // Iterate over the moves
+        for m in moves {
+            // Make the move and record if a capture occurred
+            let capture = make_move(board, player, m);
+            let new_depth = if capture { depth } else { depth - 1 };
+    
+            // Recursive call
+            let (eval, pv) = self.negamax(board, new_depth, -player, -beta, -alpha);
+            let eval = -eval;
+    
+            // Undo the move
+            undo_move(board, player, m, capture);
+    
+            if eval > max_eval {
+                max_eval = eval;
+                best_pv = pv;
+                best_pv.insert(0, m); // Prepend the current move to the PV
+            }
+            alpha = max(alpha, eval);
             if alpha >= beta {
-                return (entry.eval, Vec::new());
+                break; // Beta cutoff
             }
-        } 
-        if entry.best_move.is_some() {
-            old_best_move = entry.best_move;
         }
+    
+        // Determine the flag for the transposition table entry
+        let flag = if max_eval <= old_alpha {
+            TTFlag::UpperBound
+        } else if max_eval >= beta {
+            TTFlag::LowerBound
+        } else {
+            TTFlag::Exact
+        };
+    
+        // Store the evaluation in the transposition table
+        let entry = TTEntry {
+            best_move: if best_pv.is_empty() { None } else { Some(best_pv[0]) },
+            eval: max_eval,
+            depth,
+            flag,
+        };
+        self.tt.insert(key, entry);
+    
+        (max_eval, best_pv)
+    }
     }
 
-    if depth == 0 || is_game_over(board, player) {
-        let eval = -player as i32 * evaluate_board(board);
-        return (eval, Vec::new());
-    }
-
-    let mut max_eval = -std::i32::MAX; //It is negative infinity and not MIN_SCORE just in case int gets compared with an actual MIN_SCORE
-    let mut best_pv = Vec::new();
-
-    let mut moves = get_valid_moves(board, player);
-
-    if let Some(best_move_from_tt) = old_best_move {
-        if let Some(pos) = moves.iter().position(|&m| m == best_move_from_tt) {
-            moves.swap(0, pos); // Move the best_move to the front
-        }
-    }
-
-    for m in moves {
-        let mut new_board = board.clone();
-        let capture = make_move(&mut new_board, player, m);
-        let new_depth = if capture { depth } else { depth - 1 }; // Captures don't decrease depth
-
-        let (eval, pv) = negamax(&new_board, new_depth, -player, -beta, -alpha, tt);
-        let eval = -eval;
-
-        if eval > max_eval {
-            max_eval = eval;
-            best_pv = pv;
-            best_pv.insert(0, m); // Prepend the current move to the PV
-        }
-        alpha = max(alpha, eval);
-        if alpha >= beta {
-            break; // Beta cutoff
-        }
-    }
-
-    // Determine the flag for the transposition table entry
-    let flag = if max_eval <= old_alpha {
-        TTFlag::UpperBound
-    } else if max_eval >= beta {
-        TTFlag::LowerBound
-    } else {
-        TTFlag::Exact
-    };
-
-    // Store the evaluation in the transposition table
-    let entry = TTEntry {
-        best_move: Some(best_pv[0]), // I think maybe best_pv cannot be empty? Fix: if best_pv.is_empty() { None } else { Some(best_pv[0]) }
-        eval: max_eval,
-        depth,
-        flag,
-    };
-    tt.insert(key, entry);
-
-    (max_eval, best_pv)
-}
-
-fn board_hash(board: &Vec<Vec<i8>>) -> u64 {
+fn board_to_key(board: &[Vec<i8>]) -> u64 {
     let mut hasher = DefaultHasher::new();
     board.hash(&mut hasher);
     hasher.finish()
 }
 
-fn board_to_key(board: &Vec<Vec<i8>>) -> u64 {
-    board_hash(board)
-}
-
-fn get_valid_moves(board: &Vec<Vec<i8>>, player: i8) -> Vec<(usize, usize, usize, usize)> {
+fn get_valid_moves(board: &[Vec<i8>], player: i8) -> Vec<(usize, usize, usize, usize)> {
     let captures = get_possible_captures(board, player);
     if !captures.is_empty() {
         captures
@@ -246,7 +247,7 @@ fn get_valid_moves(board: &Vec<Vec<i8>>, player: i8) -> Vec<(usize, usize, usize
 }
 
 fn get_possible_captures(
-    board: &Vec<Vec<i8>>,
+    board: &[Vec<i8>],
     player: i8,
 ) -> Vec<(usize, usize, usize, usize)> {
     let mut captures = Vec::new();
@@ -293,7 +294,7 @@ fn get_possible_captures(
 }
 
 fn get_all_possible_moves(
-    board: &Vec<Vec<i8>>,
+    board: &[Vec<i8>],
     player: i8,
 ) -> Vec<(usize, usize, usize, usize)> {
     let mut moves = Vec::new();
@@ -343,7 +344,25 @@ fn make_move( // Returns true if a capture was made
     return false; // No capture
 }
 
-fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
+fn undo_move(
+    board: &mut Vec<Vec<i8>>,
+    player: i8,
+    mv: (usize, usize, usize, usize),
+    captured: bool,
+) {
+    let (from_row, from_col, to_row, to_col) = mv;
+    board[to_row][to_col] = 0;
+    board[from_row][from_col] = player;
+
+    if captured {
+        let captured_row = (from_row + to_row) / 2;
+        let captured_col = (from_col + to_col) / 2;
+        board[captured_row][captured_col] = -player;
+    }
+}
+
+
+fn evaluate_board(board: &[Vec<i8>]) -> i32 {
     if is_game_over(board, 1) {
         return MAX_SCORE;
     } 
@@ -397,7 +416,7 @@ fn evaluate_board(board: &Vec<Vec<i8>>) -> i32 {
     score
 }
 
-fn triangle_to_win(board: &Vec<Vec<i8>>, player: i8, i: usize, j: usize) -> bool {
+fn triangle_to_win(board: &[Vec<i8>], player: i8, i: usize, j: usize) -> bool {
     let i = i as isize;
     let j = j as isize;
     let rows = ROWS as isize;
@@ -428,7 +447,7 @@ fn triangle_to_win(board: &Vec<Vec<i8>>, player: i8, i: usize, j: usize) -> bool
     true
 }
 
-fn is_game_over(board: &Vec<Vec<i8>>, player: i8) -> bool {
+fn is_game_over(board: &[Vec<i8>], player: i8) -> bool {
     // Check if any of player's pieces reached the opposite end
     if is_winner(board, -player) {
         return true;
@@ -437,7 +456,7 @@ fn is_game_over(board: &Vec<Vec<i8>>, player: i8) -> bool {
     get_valid_moves(board, player).is_empty()
 }
 
-fn is_winner(board: &Vec<Vec<i8>>, player: i8) -> bool {
+fn is_winner(board: &[Vec<i8>], player: i8) -> bool {
     let target_row = if player == 1 { ROWS - 1 } else { 0 };
     for j in 0..COLS {
         if board[target_row][j] == player {
@@ -450,8 +469,6 @@ fn is_winner(board: &Vec<Vec<i8>>, player: i8) -> bool {
 /// A Python module implemented in Rust.
 #[pymodule]
 fn fianco_brain(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(get_best_move, m)?)?;
-    m.add_function(wrap_pyfunction!(evaluate_board_python, m)?)?;
-    m.add_function(wrap_pyfunction!(get_valid_moves_python, m)?)?;
+    m.add_class::<FiancoAI>()?;
     Ok(())
 }
