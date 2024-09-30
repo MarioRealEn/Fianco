@@ -1,10 +1,13 @@
 use numpy::PyArray2;
 use pyo3::prelude::*;
 
+// use core::hash;
 use std::cmp::{max, min};
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
+// use std::hash::{Hash, Hasher};
+// use std::collections::hash_map::DefaultHasher;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 
 const ROWS: usize = 9;
 const COLS: usize = 9;
@@ -33,14 +36,31 @@ type TranspositionTable = HashMap<u64, TTEntry>;
 #[pyclass]
 struct FiancoAI {
     tt: TranspositionTable,
+    zobrist_table: Vec<Vec<[u64; 2]>>, // [ROWS][COLS][2]
+    current_hash_key: u64,
+    hash_history: Vec<u64>,
 }
 
 #[pymethods]
 impl FiancoAI {
     #[new]
     fn new() -> Self {
+        // Initialize the zobrist_table with random numbers
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut zobrist_table: Vec<Vec<[u64; 2]>> = vec![vec![[0u64; 2]; COLS]; ROWS]; // [ROWS][COLS][2]
+        for i in 0..ROWS {
+            for j in 0..COLS {
+                for k in 0..2 {
+                    zobrist_table[i][j][k] = rng.gen::<u64>();
+                }
+            }
+        }
+
         FiancoAI {
             tt: HashMap::new(),
+            zobrist_table,
+            current_hash_key: 0,
+            hash_history: Vec::new(),
         }
     }
 
@@ -78,6 +98,15 @@ impl FiancoAI {
             ));
         }
 
+        self.current_hash_key = self.compute_hash_key(&board_state);
+
+        // Copy the current hash key
+        let mut hash_key = self.current_hash_key;
+
+        // Push the current hash key onto the stack
+        self.hash_history.push(hash_key);
+        // println!("hash_history before negamax: {:?}", self.hash_history);
+
         // Call the Negamax algorithm with the Transposition Table
         let (mut best_score, pv) = self.negamax(
             &mut board_state,
@@ -85,11 +114,14 @@ impl FiancoAI {
             player,
             MIN_SCORE,
             MAX_SCORE,
+            &mut hash_key,
         );
 
         best_score = -player as i32 * best_score;
 
         println!("Principal Variation: {:?}", pv);
+        println!("Best Score: {}", best_score);
+        // println!("hash_history after negamax: {:?}", self.hash_history);
 
         // Return the best move and evaluation score if available
         if let Some(&(_from_row, _from_col, _to_row, _to_col)) = pv.first() {
@@ -138,66 +170,90 @@ impl FiancoAI {
         player: i8,
         mut alpha: i32,
         mut beta: i32,
+        hash_key: &mut u64,
     ) -> (i32, Vec<(usize, usize, usize, usize)>) {
-        // Generate a unique key for the current board
-        let key = board_to_key(board);
+        let key = *hash_key;
         let old_alpha = alpha;
         let mut old_best_move: Option<(usize, usize, usize, usize)> = None;
-    
-        // Check if the position is already in the transposition table
-        if let Some(entry) = self.tt.get(&key) {
-            if entry.depth >= depth {
-                match entry.flag {
-                    TTFlag::Exact => {
-                        let mut pv = Vec::new();
-                        if let Some(best_move) = entry.best_move {
-                            pv.push(best_move);
-                        }
-                        return (entry.eval, pv);
-                    },
-                    TTFlag::LowerBound => alpha = max(alpha, entry.eval),
-                    TTFlag::UpperBound => beta = min(beta, entry.eval),
+
+        // Push the current hash key onto the stack
+        // self.hash_history.push(key);
+
+        // Count how many times the current position has occurred in the current path
+        let repetitions = self.hash_history.iter().filter(|&&k| k == key).count();
+
+        // Check for threefold repetition
+        if repetitions >= 3 {
+            // self.hash_history.pop(); // Remove the hash key before returning
+            // println!("Popped hash key due to threefold repetition");
+            println!("Threefold repetition detected.");
+            return (player as i32 * 15, Vec::new()); // Return a score indicating a draw
+        } else if repetitions == 0{
+            // Transposition Table lookup
+            if let Some(entry) = self.tt.get(&key) {
+                if entry.depth >= depth {
+                    match entry.flag {
+                        TTFlag::Exact => {
+                            let mut pv = Vec::new();
+                            if let Some(best_move) = entry.best_move {
+                                pv.push(best_move);
+                            }
+                            // self.hash_history.pop(); // Remove the hash key before returning
+                            // println!("Popped hash key due to TT Exact");
+                            return (entry.eval, pv);
+                        },
+                        TTFlag::LowerBound => alpha = max(alpha, entry.eval),
+                        TTFlag::UpperBound => beta = min(beta, entry.eval),
+                    }
+                    if alpha >= beta {
+                        // self.hash_history.pop(); // Remove the hash key before returning
+                        // println!("Popped hash key due to TT alpha >= beta");
+                        return (entry.eval, Vec::new());
+                    }
                 }
-                if alpha >= beta {
-                    return (entry.eval, Vec::new());
+                if entry.best_move.is_some() {
+                    old_best_move = entry.best_move;
                 }
-            }
-            if entry.best_move.is_some() {
-                old_best_move = entry.best_move;
             }
         }
-    
-        // Before any mutable borrows, we can call `is_game_over` and `evaluate_board`
+
+        // Check for depth or game over
         if depth == 0 || is_game_over(board, player) {
             let eval = -player as i32 * evaluate_board(board);
+            // self.hash_history.pop(); // Remove the hash key before returning
             return (eval, Vec::new());
         }
-    
+
         let mut max_eval = -std::i32::MAX;
         let mut best_pv = Vec::new();
-    
+
         // Get valid moves
         let mut moves = get_valid_moves(board, player);
-    
+
+        // Move ordering using TT
         if let Some(best_move_from_tt) = old_best_move {
             if let Some(pos) = moves.iter().position(|&m| m == best_move_from_tt) {
                 moves.swap(0, pos); // Move the best_move to the front
             }
         }
-    
+
         // Iterate over the moves
         for m in moves {
-            // Make the move and record if a capture occurred
-            let capture = make_move(board, player, m);
+            // Make the move and update hash key
+            let capture = self.make_move(board, player, m, hash_key);
+
+            
+
             let new_depth = if capture { depth } else { depth - 1 };
-    
+
             // Recursive call
-            let (eval, pv) = self.negamax(board, new_depth, -player, -beta, -alpha);
+            let (eval, pv) = self.negamax(board, new_depth, -player, -beta, -alpha, hash_key);
             let eval = -eval;
-    
-            // Undo the move
-            undo_move(board, player, m, capture);
-    
+
+            // Undo the move and restore hash key
+            self.undo_move(board, player, m, capture, hash_key);
+            
+
             if eval > max_eval {
                 max_eval = eval;
                 best_pv = pv;
@@ -208,7 +264,8 @@ impl FiancoAI {
                 break; // Beta cutoff
             }
         }
-    
+
+
         // Determine the flag for the transposition table entry
         let flag = if max_eval <= old_alpha {
             TTFlag::UpperBound
@@ -217,7 +274,7 @@ impl FiancoAI {
         } else {
             TTFlag::Exact
         };
-    
+
         // Store the evaluation in the transposition table
         let entry = TTEntry {
             best_move: if best_pv.is_empty() { None } else { Some(best_pv[0]) },
@@ -226,16 +283,115 @@ impl FiancoAI {
             flag,
         };
         self.tt.insert(key, entry);
-    
+
         (max_eval, best_pv)
     }
+    fn compute_hash_key(&self, board: &[Vec<i8>]) -> u64 {
+        let mut hash_key = 0u64;
+        for i in 0..ROWS {
+            for j in 0..COLS {
+                let piece = board[i][j];
+                if piece != 0 {
+                    let piece_index = if piece == -1 { 0 } else { 1 };
+                    hash_key ^= self.zobrist_table[i][j][piece_index];
+                }
+            }
+        }
+        hash_key
     }
+    fn make_move(
+        &mut self,
+        board: &mut Vec<Vec<i8>>,
+        player: i8,
+        mv: (usize, usize, usize, usize),
+        hash_key: &mut u64,
+    ) -> bool {
+        let (from_row, from_col, to_row, to_col) = mv;
 
-fn board_to_key(board: &[Vec<i8>]) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    board.hash(&mut hasher);
-    hasher.finish()
+        let piece_index = if player == -1 { 0 } else { 1 };
+
+        // XOR out the piece from its original position
+        *hash_key ^= self.zobrist_table[from_row][from_col][piece_index];
+
+        // Remove the piece from original position
+        board[from_row][from_col] = 0;
+
+        // XOR in the piece at the new position
+        *hash_key ^= self.zobrist_table[to_row][to_col][piece_index];
+        
+        // Push the current hash key onto the stack
+        self.hash_history.push(*hash_key);
+        // println!("hash_history after make_move: {:?}", self.hash_history);
+
+        // Place the piece at new position
+        board[to_row][to_col] = player;
+
+        let mut captured = false;
+
+        // Check for capture
+        if (from_row as i32 - to_row as i32).abs() == 2 {
+            let captured_row = (from_row + to_row) / 2;
+            let captured_col = (from_col + to_col) / 2;
+            let captured_piece_index = if -player == -1 { 0 } else { 1 };
+
+            // XOR out the captured piece
+            *hash_key ^= self.zobrist_table[captured_row][captured_col][captured_piece_index];
+
+            // Remove the captured piece
+            board[captured_row][captured_col] = 0;
+
+            captured = true;
+        }
+
+        captured
+    }
+    fn undo_move(
+        &mut self,
+        board: &mut Vec<Vec<i8>>,
+        player: i8,
+        mv: (usize, usize, usize, usize),
+        captured: bool,
+        hash_key: &mut u64,
+    ) {
+        let (from_row, from_col, to_row, to_col) = mv;
+
+        let piece_index = if player == -1 { 0 } else { 1 };
+
+        self.hash_history.pop(); // Remove the hash key before undoing the move
+        // println!("hash_history after undo_move: {:?}", self.hash_history);
+
+        // XOR out the piece from the destination position
+        *hash_key ^= self.zobrist_table[to_row][to_col][piece_index];
+
+        // Remove the piece from the destination position
+        board[to_row][to_col] = 0;
+
+        // XOR in the piece at the original position
+        *hash_key ^= self.zobrist_table[from_row][from_col][piece_index];
+
+        // Place the piece back at the original position
+        board[from_row][from_col] = player;
+
+        if captured {
+            let captured_row = (from_row + to_row) / 2;
+            let captured_col = (from_col + to_col) / 2;
+            let captured_piece_index = if -player == -1 { 0 } else { 1 };
+
+            // XOR in the captured piece
+            *hash_key ^= self.zobrist_table[captured_row][captured_col][captured_piece_index];
+
+            // Restore the captured piece
+            board[captured_row][captured_col] = -player;
+        }
+    }
 }
+
+// fn board_to_key(board: &[Vec<i8>]) -> u64 {
+//     let mut hasher = DefaultHasher::new();
+//     board.hash(&mut hasher);
+//     hasher.finish()
+// }
+
 
 fn get_valid_moves(board: &[Vec<i8>], player: i8) -> Vec<(usize, usize, usize, usize)> {
     let captures = get_possible_captures(board, player);
@@ -323,42 +479,6 @@ fn get_all_possible_moves(
     }
 
     moves
-}
-
-fn make_move( // Returns true if a capture was made
-    board: &mut Vec<Vec<i8>>,
-    player: i8,
-    mv: (usize, usize, usize, usize),
-) -> bool {
-    let (from_row, from_col, to_row, to_col) = mv;
-    board[from_row][from_col] = 0;
-    board[to_row][to_col] = player;
-
-    // Check for capture
-    if (from_row as i32 - to_row as i32).abs() == 2 {
-        let captured_row = (from_row + to_row) / 2;
-        let captured_col = (from_col + to_col) / 2;
-        board[captured_row][captured_col] = 0;
-        return true; // Capture
-    }
-    return false; // No capture
-}
-
-fn undo_move(
-    board: &mut Vec<Vec<i8>>,
-    player: i8,
-    mv: (usize, usize, usize, usize),
-    captured: bool,
-) {
-    let (from_row, from_col, to_row, to_col) = mv;
-    board[to_row][to_col] = 0;
-    board[from_row][from_col] = player;
-
-    if captured {
-        let captured_row = (from_row + to_row) / 2;
-        let captured_col = (from_col + to_col) / 2;
-        board[captured_row][captured_col] = -player;
-    }
 }
 
 

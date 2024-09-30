@@ -23,7 +23,6 @@ class Controller:
             best_score = pv[0]
             from_row, from_col, to_row, to_col = pv[1][0] 
             print(f"Current eval: {best_score}")
-            print(f"Board eval: {self.ai.evaluate_board_python(board_state)}")
             return from_row, from_col, to_row, to_col
         except ValueError:
             self.game.export_position()
