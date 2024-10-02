@@ -172,12 +172,12 @@ board = np.array([
 [0, 0, 0, 0, 0, 0, 0, 0, 0],
 [0, 0, 0, 0, 0, 0, 0, 0, 0],
 [0, 0, 0, 0, -1, -1, 0, -1, -1],
-], dtype=np.int8)
+], dtype=np.int8) # THIS ONE DOES STRANGE SHIT WITH DEPTH 5. WHITE TO PLAY
 
 # print(get_valid_moves_python(board, 1))
 player = -1
 ai = FiancoAI(player)
-print(ai.get_best_move(board, player, 8))
+print(ai.get_best_move(board, player, 7))
 # print(evaluate_board_python(board, 1))
 
 #I NEED TO MAKE SURE I RESIST AS MUCH AS POSSIBLE

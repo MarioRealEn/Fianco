@@ -41,6 +41,7 @@ struct FiancoAI {
     current_hash_key: u64,
     hash_history: Vec<u64>,
     ai_player: i8,
+    root_move_scores: HashMap<(usize, usize, usize, usize), i32>,
 }
 
 #[pymethods]
@@ -64,6 +65,7 @@ impl FiancoAI {
             current_hash_key: 0,
             hash_history: Vec::new(),
             ai_player: ai_player,
+            root_move_scores: HashMap::new(),
         }
     }
 
@@ -72,11 +74,13 @@ impl FiancoAI {
         _py: Python,
         board: &PyArray2<i8>,
         player: i8,
-        depth: i32,
+        max_depth: i32,
     ) -> PyResult<(i32, Vec<(usize, usize, usize, usize)>)> {
         // Safely access the board data
         let board_readonly = board.readonly();
         let board_state = board_readonly.as_array();
+        let mut best_score= 505;
+        let mut pv = Vec::new();
 
         // Validate board shape
         if board_state.shape() != [ROWS, COLS] {
@@ -103,29 +107,36 @@ impl FiancoAI {
 
         self.current_hash_key = self.compute_hash_key(&board_state);
 
-        // Copy the current hash key
-        let mut hash_key = self.current_hash_key;
-
         // Push the current hash key onto the stack
-        self.hash_history.push(hash_key);
-        // println!("hash_history before negamax: {:?}", self.hash_history);
+        self.hash_history.push(self.current_hash_key);
 
-        // Call the Negamax algorithm with the Transposition Table
-        let (mut best_score, pv) = self.negamax(
-            &mut board_state,
-            depth,
-            player,
-            MIN_SCORE,
-            MAX_SCORE,
-            &mut hash_key,
-        );
+        // Initialize root_move_scores
+        self.root_move_scores.clear();
 
-        best_score = -player as i32 * best_score;
+        for depth in 1..=max_depth {
 
-        println!("Principal Variation: {:?}", pv);
-        println!("Best Score: {}", best_score);
+            // Copy the current hash key
+            let mut hash_key = self.current_hash_key;
+
+            
+            // println!("hash_history before negamax: {:?}", self.hash_history);
+
+            // Call the Negamax algorithm with the Transposition Table
+            (best_score, pv) = self.negamax(
+                &mut board_state, // SHOULD I CLONE?
+                depth,
+                player,
+                MIN_SCORE,
+                MAX_SCORE,
+                &mut hash_key,
+                true,
+            );
+
+            best_score = -player as i32 * best_score;
+
+            println!("Depth {}: Best Score = {}, PV = {:?}", depth, best_score, pv);
         // println!("hash_history after negamax: {:?}", self.hash_history);
-
+        }
         // Return the best move and evaluation score if available
         if let Some(&(_from_row, _from_col, _to_row, _to_col)) = pv.first() {
             Ok((best_score, pv))
@@ -174,6 +185,7 @@ impl FiancoAI {
         mut alpha: i32,
         mut beta: i32,
         hash_key: &mut u64,
+        is_root: bool,
     ) -> (i32, Vec<(usize, usize, usize, usize)>) {
         let key = *hash_key;
         let old_alpha = alpha;
@@ -233,10 +245,18 @@ impl FiancoAI {
         // Get valid moves
         let mut moves = get_valid_moves(board, player);
 
-        // Move ordering using TT
-        if let Some(best_move_from_tt) = old_best_move {
-            if let Some(pos) = moves.iter().position(|&m| m == best_move_from_tt) {
-                moves.swap(0, pos); // Move the best_move to the front
+        if is_root {
+            // Sort moves based on root_move_scores
+            moves.sort_by_cached_key(|&m| {
+                // Use negative scores to sort in descending order
+                player as i32 * (self.root_move_scores.get(&m).cloned().unwrap_or(0))
+            });
+        } else {
+            // At non-root nodes, optionally use TT best move
+            if let Some(best_move_from_tt) = old_best_move {
+                if let Some(pos) = moves.iter().position(|&m| m == best_move_from_tt) {
+                    moves.swap(0, pos); // Move the best_move to the front
+                }
             }
         }
 
@@ -250,7 +270,7 @@ impl FiancoAI {
             let new_depth = if capture { depth } else { depth - 1 };
 
             // Recursive call
-            let (eval, pv) = self.negamax(board, new_depth, -player, -beta, -alpha, hash_key);
+            let (eval, pv) = self.negamax(board, new_depth, -player, -beta, -alpha, hash_key, false);
             let eval = -eval;
 
             // Undo the move and restore hash key
@@ -286,6 +306,11 @@ impl FiancoAI {
             flag,
         };
         self.tt.insert(key, entry);
+
+        if is_root && !best_pv.is_empty() {
+            // At root, store the move's score for ordering
+            self.root_move_scores.insert(best_pv[0], max_eval);
+        }
 
         (max_eval, best_pv)
     }

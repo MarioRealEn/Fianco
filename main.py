@@ -7,20 +7,20 @@ from controller import AIController
 
 def main():
     board = np.array([
-[0, 1, 1, 0, 0, 1, 1, 1, 1],
-[1, 1, 0, 1, 0, 0, 0, 1, 0],
-[0, 1, 0, 0, 0, 0, 1, 0, 0],
-[0, 0, 1, 0, 0, 0, 0, 0, 0],
-[-1, 0, 0, 0, 0, 0, 0, 0, 0],
-[0, 0, 0, 0, 0, 0, -1, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 1, 0],
+[1, 0, 0, 1, 0, 0, 0, 0, 1],
+[-1, 1, 1, 0, 0, 1, 0, 1, 1],
 [0, -1, 0, 0, 0, 0, 0, 0, 0],
-[0, 0, 0, 0, 0, 0, 0, -1, 0],
-[-1, -1, -1, -1, -1, -1, -1, -1, -1],
+[0, 0, -1, 0, 0, 0, 0, 0, -1],
+[0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, -1, -1, 0, -1, -1],
 ], dtype=np.int8)
     fianco = game.FiancoGame()
     # Example: Set Black player to be controlled by AI
-    fianco.player_types[1] = 'ai6'
-    fianco.player_types[-1] = 'ai6' 
+    fianco.player_types[1] = 'ai7'
+    # fianco.player_types[-1] = 'ai7' 
     # Initialize controllers for AI players
     for player, p_type in fianco.player_types.items():
         print(p_type[0:2], p_type[2])

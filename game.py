@@ -44,7 +44,7 @@ class FiancoGame:
         self.clock = pygame.time.Clock()
         self.initial_board_state = board
         self.board_state = self.initial_board_state.copy()
-        self.current_player = 1 # White: -1, Black: 1
+        self.current_player = -1 # White: -1, Black: 1
         self.selected_piece = None
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
         self.white_moves = []
