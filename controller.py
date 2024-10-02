@@ -1,12 +1,12 @@
 import numpy as np
 from fianco_brain import FiancoAI  # Import the Rust AI function
 
-class Controller:
+class AIController:
     def __init__(self, player, game, depth=6):
         self.player = player  # -1 for White, 1 for Black
         self.game = game
         self.depth = depth
-        self.ai = FiancoAI()
+        self.ai = FiancoAI(player)
 
     def get_move(self, board_state):
         # Ensure the board_state is a NumPy array of type int8
@@ -27,16 +27,67 @@ class Controller:
         except ValueError:
             self.game.export_position()
             raise NotImplementedError("AI has no valid moves.")
-        
-    def get_move_no_ai(self, board_state):
-        # Placeholder for Rust function call
-        # In the future, this method will call the Rust function to get the AI's move
-        arr = np.array([[0,0,1,0], [1, 1, 2, 1]])
-        random_index = np.random.randint(0, arr.shape[0], size=1)
-        print(arr[random_index][0])
-        return arr[random_index][0]
-        # return np.random.choice(game.get_all_possible_moves(self.player))
-        # raise NotImplementedError("AI move function is not implemented yet.")
 
 
-    
+class ExportController:
+    def __init__(self, player, game, export_file="fianco_export.txt"):
+        self.player = player.lower()  # 'white' or 'black'
+        self.game = game
+        self.export_file = export_file
+        self.moves = []  # List to store the moves for the player
+        self.current_move_index = 0  # To keep track of the next move to play
+
+        self.parse_export_file()
+
+    def parse_export_file(self):
+        with open(self.export_file, 'r') as f:
+            lines = f.readlines()
+
+        # Variables to track which section we're in
+        parsing_white = False
+        parsing_black = False
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue  # Skip empty lines
+
+            if line.startswith('White Moves:'):
+                parsing_white = True
+                parsing_black = False
+                continue
+            elif line.startswith('Black Moves:'):
+                parsing_black = True
+                parsing_white = False
+                continue
+            elif line.startswith('Board State:'):
+                parsing_white = False
+                parsing_black = False
+                continue
+
+            if parsing_white and self.player == 'white':
+                self.moves.append(line)
+            elif parsing_black and self.player == 'black':
+                self.moves.append(line)
+
+
+    def get_move(self):
+        if self.current_move_index >= len(self.moves):
+            raise Exception("No more moves available in the export file for player '{}'.".format(self.player))
+
+        move_notation = self.moves[self.current_move_index]
+        self.current_move_index += 1
+
+        # Parse the move notation (e.g., 'D4->D5')
+        if '->' not in move_notation:
+            raise ValueError("Invalid move notation: '{}'".format(move_notation))
+
+        from_notation, to_notation = move_notation.split('->')
+        from_row, from_col = self.game.notation_to_coord(from_notation)
+        to_row, to_col = self.game.notation_to_coord(to_notation)
+
+        # Validate the move using the game's rules
+        if not self.game.is_valid_move(self.player, from_row, from_col, to_row, to_col):
+            raise ValueError("Invalid move according to the game rules: '{}'".format(move_notation))
+
+        return from_row, from_col, to_row, to_col

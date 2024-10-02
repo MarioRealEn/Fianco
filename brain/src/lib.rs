@@ -13,6 +13,7 @@ const ROWS: usize = 9;
 const COLS: usize = 9;
 const MAX_SCORE: i32 = 1_000_000;
 const MIN_SCORE: i32 = -MAX_SCORE;
+const DRAW_SCORE: i32 = -30;
 
 // Define the possible flags for entries
 #[derive(Debug, Clone, Copy)]
@@ -39,12 +40,13 @@ struct FiancoAI {
     zobrist_table: Vec<Vec<[u64; 2]>>, // [ROWS][COLS][2]
     current_hash_key: u64,
     hash_history: Vec<u64>,
+    ai_player: i8,
 }
 
 #[pymethods]
 impl FiancoAI {
     #[new]
-    fn new() -> Self {
+    fn new(ai_player: i8) -> Self {
         // Initialize the zobrist_table with random numbers
         let mut rng = StdRng::seed_from_u64(0);
         let mut zobrist_table: Vec<Vec<[u64; 2]>> = vec![vec![[0u64; 2]; COLS]; ROWS]; // [ROWS][COLS][2]
@@ -61,6 +63,7 @@ impl FiancoAI {
             zobrist_table,
             current_hash_key: 0,
             hash_history: Vec::new(),
+            ai_player: ai_player,
         }
     }
 
@@ -187,7 +190,7 @@ impl FiancoAI {
             // self.hash_history.pop(); // Remove the hash key before returning
             // println!("Popped hash key due to threefold repetition");
             println!("Threefold repetition detected.");
-            return (player as i32 * 15, Vec::new()); // Return a score indicating a draw
+            return (-self.ai_player as i32 * DRAW_SCORE, Vec::new()); // Return a score indicating a draw
         } else if repetitions == 0{
             // Transposition Table lookup
             if let Some(entry) = self.tt.get(&key) {
@@ -411,7 +414,9 @@ fn get_possible_captures(
 
     for i in 0..ROWS {
         for j in 0..COLS {
-            if board[i][j] == player {
+            // let i = ROWS - (m+1);
+            // let j = COLS - (n+1);
+            if board[i][j] == player {  //CHANGE THIS
                 let delta_rows = 2 * direction;
                 let enemy_row = i as i32 + delta_rows / 2;
                 let enemy_cols = [j as i32 - 1, j as i32 + 1];
@@ -458,6 +463,8 @@ fn get_all_possible_moves(
 
     for i in 0..ROWS {
         for j in 0..COLS {
+            // let i = ROWS - (m+1);
+            // let j = COLS - (n+1);
             if board[i][j] == player {
                 // Forward move
                 let fwd_row = i as i32 + direction;
@@ -504,9 +511,9 @@ fn evaluate_board(board: &[Vec<i8>]) -> i32 {
                         continue;
                     }
                     if !triangle_found {
-                        score += 10;
-                        score += (ROWS - i - 1) as i32;
-                        score += (j as i32 - 4).abs();
+                        score += 20;
+                        score += 3 * (ROWS - i - 1) as i32;
+                        score += 2 * (j as i32 - 4).abs();
                     }
                 },
                 1 => {
@@ -516,9 +523,9 @@ fn evaluate_board(board: &[Vec<i8>]) -> i32 {
                         continue;
                     }
                     if !triangle_found {
-                        score -= 10;
-                        score -= i as i32;
-                        score -= (j as i32 - 4).abs();
+                        score -= 20;
+                        score -= 3 * i as i32;
+                        score -= 2 * (j as i32 - 4).abs();
                     }
                 },
                 _ => (),

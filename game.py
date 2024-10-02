@@ -1,7 +1,7 @@
 import pygame
 import numpy as np
 import sys
-from controller import Controller  # Import the Controller class
+from controller import AIController  # Import the Controller class
 
 # Constants
 ROWS, COLS = 9, 9
@@ -44,7 +44,7 @@ class FiancoGame:
         self.clock = pygame.time.Clock()
         self.initial_board_state = board
         self.board_state = self.initial_board_state.copy()
-        self.current_player = -1 # White: -1, Black: 1
+        self.current_player = 1 # White: -1, Black: 1
         self.selected_piece = None
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
         self.white_moves = []
@@ -251,6 +251,13 @@ class FiancoGame:
         col_label = chr(ord('A') + col)
         row_label = str(ROWS - row)
         return col_label + row_label
+    
+    def notation_to_coord(self, notation):
+        col_label = notation[0].upper()
+        row_label = notation[1:]
+        col = ord(col_label) - ord('A')
+        row = ROWS - int(row_label)
+        return row, col
 
     def get_player_label(self, player):
         return 'White' if player == -1 else 'Black'
@@ -518,6 +525,6 @@ if __name__ == "__main__":
     # Initialize controllers for AI players
     for player, p_type in game.player_types.items():
         if p_type == 'ai':
-            game.controllers[player] = Controller(player)
+            game.controllers[player] = AIController(player)
     game.run_game()
 

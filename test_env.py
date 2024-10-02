@@ -1,7 +1,7 @@
 import numpy as np
 from fianco_brain import FiancoAI  # Import the Rust AI function
 
-ai = FiancoAI()
+
 
 # board_state = np.array([
 #     [0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -66,8 +66,8 @@ board = np.array([
 
 
 # board = np.array([
-[0, 0, 0, 0, 0, 0, 0, 0, 0],
-[0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [0, 0, 0, 0, 0, 0, 0, 0, 0],
+# [0, 0, 0, 0, 0, 0, 0, 0, 0],
 # [0, 0, 0, 0, 0, 0, 0, 0, 1],
 # [1, 1, 0, 0, 0, 0, 0, 0, 1],
 # [0, 0, 1, 0, 0, -1, 0, 0, 0],
@@ -150,6 +150,34 @@ board = np.array([
 [0, 0, 0, 0, 0, 0, -1, -1, -1],
 ], dtype=np.int8)
 
+board = np.array([
+[0, 0, 0, 0, 0, 0, 1, 0, 0],
+[0, 0, 0, 0, 0, 0, 1, 0, 1],
+[1, 0, 0, 0, 0, 0, -1, 0, 0],
+[1, 1, 1, 0, 0, -1, 0, 0, 1],
+[0, 0, 0, 0, 0, 0, 0, 1, -1],
+[0, 0, 0, -1, -1, 0, 0, 0, 0],
+[0, -1, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, 0, 0, -1, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, -1, -1],
+], dtype=np.int8)
+
+board = np.array([
+[0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 1, 0],
+[1, 0, 0, 1, 0, 0, 0, 0, 1],
+[-1, 1, 1, 0, 0, 1, 0, 1, 1],
+[0, -1, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, -1, 0, 0, 0, 0, 0, -1],
+[0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, 0, 0, 0, 0, 0],
+[0, 0, 0, 0, -1, -1, 0, -1, -1],
+], dtype=np.int8)
+
 # print(get_valid_moves_python(board, 1))
-print(ai.evaluate_board_python(board))
+player = -1
+ai = FiancoAI(player)
+print(ai.get_best_move(board, player, 8))
 # print(evaluate_board_python(board, 1))
+
+#I NEED TO MAKE SURE I RESIST AS MUCH AS POSSIBLE
