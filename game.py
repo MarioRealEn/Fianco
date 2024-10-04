@@ -389,8 +389,8 @@ class FiancoGame:
             self.export_position()
             pygame.display.flip()
             pygame.time.wait(3000)
-            pygame.quit()
-            sys.exit()
+            # pygame.quit()
+            # sys.exit()
 
     def select_piece(self, row, col):
         if self.board_state[row, col] == self.current_player:
@@ -404,8 +404,8 @@ class FiancoGame:
         self.draw_board()
 
     def handle_click(self, pos):
-        if self.game_over:
-            return
+        # if self.game_over:
+        #     return
         x, y = pos
         # Check if click is on play/pause button
         if self.play_button_rect.collidepoint(x, y):
@@ -505,11 +505,11 @@ class FiancoGame:
         self.draw_board()
         while True:
             self.clock.tick(60)
-            if self.game_over:
-                pygame.quit()
-                sys.exit()
+            # if self.game_over:
+            #     pygame.quit()
+            #     sys.exit()
             # If it's AI's turn and the game is not paused
-            if self.player_types[self.current_player][0:2] == 'ai' and not self.paused:
+            if not self.game_over and self.player_types[self.current_player][0:2] == 'ai' and not self.paused:
                 self.handle_ai_move()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:

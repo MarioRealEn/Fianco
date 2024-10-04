@@ -81,6 +81,7 @@ impl FiancoAI {
         let board_state = board_readonly.as_array();
         let mut best_score= 505;
         let mut pv = Vec::new();
+        let mut depth_results: Vec<(i32, i32, Vec<(usize, usize, usize, usize)>)> = Vec::new();
 
         // Validate board shape
         if board_state.shape() != [ROWS, COLS] {
@@ -122,7 +123,7 @@ impl FiancoAI {
             // println!("hash_history before negamax: {:?}", self.hash_history);
 
             // Call the Negamax algorithm with the Transposition Table
-            (best_score, pv) = self.negamax(
+            let (score, pv_current) = self.negamax(
                 &mut board_state, // SHOULD I CLONE?
                 depth,
                 player,
@@ -131,11 +132,48 @@ impl FiancoAI {
                 &mut hash_key,
                 true,
             );
-
-            best_score = -player as i32 * best_score;
-
+            best_score = -player as i32 * score;
+            pv = pv_current.clone();
+            
+            depth_results.push((depth, best_score, pv_current.clone()));
+            
             println!("Depth {}: Best Score = {}, PV = {:?}", depth, best_score, pv);
+            
+
         // println!("hash_history after negamax: {:?}", self.hash_history);
+        }
+
+        let min_score_achieved = depth_results.iter().any(|&(_, score, _)| score == -player as i32 * MIN_SCORE);
+        let max_score_achieved = depth_results.iter().any(|&(_, score, _)| score == -player as i32 * MAX_SCORE);
+
+        // Find the highest depth where score != MIN_SCORE
+        println!("Min score achieved");
+        let mut best_pv = None;
+        let mut pv_last_iter = Vec::new();
+        for (_, score, pv_candidate) in depth_results.iter().rev() {
+            if min_score_achieved {
+                if *score != -player as i32 * MIN_SCORE {
+                    best_pv = Some(pv_candidate.clone());
+                    break;
+                }
+            }
+            if max_score_achieved && !min_score_achieved {
+                if *score != -player as i32 * MAX_SCORE {
+                    if !pv_last_iter.is_empty() {
+                        best_pv = Some(pv_last_iter.clone());
+                    } else {
+                        best_pv = Some(pv_candidate.clone());
+                    }
+                    break;
+                }
+                pv_last_iter = pv_candidate.clone();
+            }
+        }
+        if let Some(best_pv) = best_pv {
+            // Update pv to avoid the move leading to a forced loss
+            pv = best_pv;
+        } else {
+            // All depths resulted in MIN_SCORE or MAX_SCORE; pv remains as is
         }
         // Return the best move and evaluation score if available
         if let Some(&(_from_row, _from_col, _to_row, _to_col)) = pv.first() {
@@ -577,19 +615,19 @@ fn triangle_to_win(board: &[Vec<i8>], player: i8, i: usize, j: usize) -> bool {
     let (i1, i2) = if player == 1 {
         (i + 1, rows - 1)
     } else {
-        if i == 0 {
-            println!("i is zero: {}", i);
-        }
+        // if i == 0 {
+        //     println!("i is zero: {}", i);
+        // }
         (0, if i > 0 { i - 1 } else { 0 })
     };
 
     for n in i1..=i2 {
-        let delta = player as isize * (n - i);
+        let delta = player as isize * (n - i ) - 1;
         let j1 = (j - delta).max(0).min(cols - 1);
         let j2 = (j + delta).max(0).min(cols - 1);
-        if j2 < 0 || j1 < 0 {
-            println!("j1 or j2 is less than zero: {}, {}", j1, j2);
-        }
+        // if j2 < 0 || j1 < 0 {
+        //     println!("j1 or j2 is less than zero: {}, {}", j1, j2);
+        // }
         for m in j1..=j2 {
             if board[n as usize][m as usize] == -player {
                 return false;

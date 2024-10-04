@@ -1,0 +1,13 @@
+C:\Users\Mario\Documents\Git\Fianco\brain\target\release\deps\libpyo3_build_config-2393dd0b25ac0188.rmeta: C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\lib.rs C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\errors.rs C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\impl_.rs C:\Users\Mario\Documents\Git\Fianco\brain\target\release\build\pyo3-build-config-97cd189b6d19b1ce\out/pyo3-build-config-file.txt C:\Users\Mario\Documents\Git\Fianco\brain\target\release\build\pyo3-build-config-97cd189b6d19b1ce\out/pyo3-build-config.txt
+
+C:\Users\Mario\Documents\Git\Fianco\brain\target\release\deps\libpyo3_build_config-2393dd0b25ac0188.rlib: C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\lib.rs C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\errors.rs C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\impl_.rs C:\Users\Mario\Documents\Git\Fianco\brain\target\release\build\pyo3-build-config-97cd189b6d19b1ce\out/pyo3-build-config-file.txt C:\Users\Mario\Documents\Git\Fianco\brain\target\release\build\pyo3-build-config-97cd189b6d19b1ce\out/pyo3-build-config.txt
+
+C:\Users\Mario\Documents\Git\Fianco\brain\target\release\deps\pyo3_build_config-2393dd0b25ac0188.d: C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\lib.rs C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\errors.rs C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\impl_.rs C:\Users\Mario\Documents\Git\Fianco\brain\target\release\build\pyo3-build-config-97cd189b6d19b1ce\out/pyo3-build-config-file.txt C:\Users\Mario\Documents\Git\Fianco\brain\target\release\build\pyo3-build-config-97cd189b6d19b1ce\out/pyo3-build-config.txt
+
+C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\lib.rs:
+C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\errors.rs:
+C:\Users\Mario\.cargo\registry\src\index.crates.io-6f17d22bba15001f\pyo3-build-config-0.16.6\src\impl_.rs:
+C:\Users\Mario\Documents\Git\Fianco\brain\target\release\build\pyo3-build-config-97cd189b6d19b1ce\out/pyo3-build-config-file.txt:
+C:\Users\Mario\Documents\Git\Fianco\brain\target\release\build\pyo3-build-config-97cd189b6d19b1ce\out/pyo3-build-config.txt:
+
+# env-dep:OUT_DIR=C:\\Users\\Mario\\Documents\\Git\\Fianco\\brain\\target\\release\\build\\pyo3-build-config-97cd189b6d19b1ce\\out
