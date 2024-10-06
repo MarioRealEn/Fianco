@@ -14,6 +14,8 @@ const COLS: usize = 9;
 const MAX_SCORE: i32 = 1_000_000;
 const MIN_SCORE: i32 = -MAX_SCORE;
 const DRAW_SCORE: i32 = -30;
+const LOSS_BY_TRIANGLE: i32 = -MAX_SCORE/2;
+const WIN_BY_TRIANGLE: i32 = MAX_SCORE/2;
 
 // Define the possible flags for entries
 #[derive(Debug, Clone, Copy)]
@@ -113,6 +115,7 @@ impl FiancoAI {
 
         // Initialize root_move_scores
         self.root_move_scores.clear();
+        // self.tt.clear(); //ERASE THIS!!
 
         for depth in 1..=max_depth {
 
@@ -143,7 +146,7 @@ impl FiancoAI {
         // println!("hash_history after negamax: {:?}", self.hash_history);
         }
 
-        let min_score_achieved = depth_results.iter().any(|&(_, score, _)| score == -player as i32 * MIN_SCORE);
+        let min_score_achieved = depth_results.iter().any(|&(_, score, _)| -player as i32 * score <=  LOSS_BY_TRIANGLE);
         let max_score_achieved = depth_results.iter().any(|&(_, score, _)| score == -player as i32 * MAX_SCORE);
 
         // Find the highest depth where score != MIN_SCORE
@@ -152,17 +155,16 @@ impl FiancoAI {
         let mut pv_last_iter = Vec::new();
         for (_, score, pv_candidate) in depth_results.iter().rev() {
             if min_score_achieved {
-                if *score != -player as i32 * MIN_SCORE {
+                if -player as i32 * *score > LOSS_BY_TRIANGLE {
                     best_pv = Some(pv_candidate.clone());
                     break;
                 }
             }
             if max_score_achieved && !min_score_achieved {
+                best_pv = Some(pv_candidate.clone());
                 if *score != -player as i32 * MAX_SCORE {
                     if !pv_last_iter.is_empty() {
                         best_pv = Some(pv_last_iter.clone());
-                    } else {
-                        best_pv = Some(pv_candidate.clone());
                     }
                     break;
                 }
@@ -201,7 +203,7 @@ impl FiancoAI {
     //     Ok(get_valid_moves(&board_state, player))
     // }
 
-    fn evaluate_board_python(&mut self, board: &PyArray2<i8>) -> i32 {
+    fn evaluate_board_python(&mut self, board: &PyArray2<i8>, player: i8) -> i32 {
         // Convert the ndarray to Vec<Vec<i8>>
         let board_readonly = board.readonly();
         let board_state: Vec<Vec<i8>> = board_readonly
@@ -210,7 +212,7 @@ impl FiancoAI {
             .map(|row| row.to_vec())
             .collect();
 
-        evaluate_board(&board_state)
+        evaluate_board(&board_state, player)
     }
 }
 
@@ -272,7 +274,7 @@ impl FiancoAI {
 
         // Check for depth or game over
         if depth == 0 || is_game_over(board, player) {
-            let eval = -player as i32 * evaluate_board(board);
+            let eval = -player as i32 * evaluate_board(board, player);
             // self.hash_history.pop(); // Remove the hash key before returning
             return (eval, Vec::new());
         }
@@ -551,8 +553,8 @@ fn get_all_possible_moves(
     moves
 }
 
-
-fn evaluate_board(board: &[Vec<i8>]) -> i32 {
+#[inline]
+fn evaluate_board(board: &[Vec<i8>], player_to_move: i8) -> i32 {
     if is_game_over(board, 1) {
         return MAX_SCORE;
     } 
@@ -561,14 +563,14 @@ fn evaluate_board(board: &[Vec<i8>]) -> i32 {
     }
     // Calculate the score based on the maximizer's perspective
     let mut score = 0;
-    let mut length_triangle_white: usize = ROWS - 1;
-    let mut length_triangle_black: usize = ROWS - 1;
+    let mut length_triangle_white: usize = ROWS;
+    let mut length_triangle_black: usize = ROWS;
     let mut triangle_found = false;
     for i in 0..ROWS {
         for j in 0..COLS {
             match board[i][j] {
                 -1 => {
-                    if triangle_to_win(board, -1, i, j) {
+                    if new_triangle_to_win(board, player_to_move,-1, i, j) {
                         length_triangle_white = std::cmp::min(length_triangle_white, i);
                         triangle_found = true;
                         continue;
@@ -580,7 +582,7 @@ fn evaluate_board(board: &[Vec<i8>]) -> i32 {
                     }
                 },
                 1 => {
-                    if triangle_to_win(board, 1, i, j) {
+                    if new_triangle_to_win(board, player_to_move, 1, i, j) {
                         length_triangle_black = std::cmp::min(length_triangle_black, ROWS - i - 1 as usize);
                         triangle_found = true;
                         continue;
@@ -595,13 +597,14 @@ fn evaluate_board(board: &[Vec<i8>]) -> i32 {
             }
         }
     }
-    
+    // println!("Triangle for white: {}", length_triangle_white);
+    // println!("Triangle for black: {}", length_triangle_black);
     if length_triangle_black < length_triangle_white {
         // println!("Triangle for black");
-        return MIN_SCORE;
+        return LOSS_BY_TRIANGLE;
     } else if length_triangle_black > length_triangle_white {
         // println!("Triangle for white");
-        return MAX_SCORE;
+        return WIN_BY_TRIANGLE;
     }
     score
 }
@@ -633,6 +636,51 @@ fn triangle_to_win(board: &[Vec<i8>], player: i8, i: usize, j: usize) -> bool {
                 return false;
             }
         }
+    }
+    true
+}
+
+#[inline]
+fn new_triangle_to_win(board: &[Vec<i8>], player_to_move: i8, player: i8, i: usize, j: usize) -> bool {
+    // Convert indices to i32 for calculations
+    let i = i as i32;
+    let j = j as i32;
+    let rows = ROWS as i32;
+    let cols = COLS as i32;
+    let player_i32 = player as i32; // Cache player as i32
+
+    // Determine the step direction based on the player
+    let step_n = -player_i32; // 1 for player 1, -1 for player -1
+
+    // Determine starting and ending row indices based on player
+    let (end_n, start_n) = if player == 1 {
+        (i + 1, rows - 1)
+    } else {
+        (i - 1, 0)
+    };
+
+    let mut n = start_n;
+    let delta_offset = if player_to_move == player {1} else {0}; // Used to adjust delta after the first iteration
+
+    loop {
+        let delta = player_i32 * (n - i) - delta_offset;
+        let j1 = (j - delta).max(0).min(cols - 1);
+        let j2 = (j + delta).max(0).min(cols - 1);
+
+        // Check the triangle row for opponent's pieces
+        for m in j1..=j2 {
+            if board[n as usize][m as usize] == -player {
+                return false;
+            }
+        }
+
+        // Break the loop if we've reached the end
+        if n == end_n {
+            break;
+        }
+
+        // Move to the next row in the triangle
+        n += step_n;
     }
     true
 }
