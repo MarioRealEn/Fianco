@@ -15,8 +15,8 @@ const COLS: usize = 9;
 const MAX_SCORE: i32 = 1_000_000;
 const MIN_SCORE: i32 = -MAX_SCORE;
 const DRAW_SCORE: i32 = -30;
-const LOSS_BY_TRIANGLE: i32 = -MAX_SCORE/2;
-const WIN_BY_TRIANGLE: i32 = MAX_SCORE/2;
+// const LOSS_BY_TRIANGLE: i32 = -MAX_SCORE/2;
+const WIN_BY_TRIANGLE: i32 = 50_000;
 
 // Define the possible flags for entries
 #[derive(Debug, Clone, Copy)]
@@ -166,21 +166,20 @@ impl FiancoAI {
         // println!("hash_history after negamax: {:?}", self.hash_history);
         }
 
-        let min_score_achieved = depth_results.iter().any(|&(_, score, _)| -player as i32 * score <=  LOSS_BY_TRIANGLE);
+        let loss_in_sight = depth_results.iter().any(|&(_, score, _)| player as i32 * score >= WIN_BY_TRIANGLE);
         let max_score_achieved = depth_results.iter().any(|&(_, score, _)| score == -player as i32 * MAX_SCORE);
 
         // Find the highest depth where score != MIN_SCORE
-        println!("Min score achieved");
         let mut best_pv = None;
         let mut pv_last_iter = Vec::new();
         for (_, score, pv_candidate) in depth_results.iter().rev() {
-            if min_score_achieved {
-                if -player as i32 * *score > LOSS_BY_TRIANGLE {
+            if loss_in_sight {
+                if player as i32 * *score < WIN_BY_TRIANGLE {
                     best_pv = Some(pv_candidate.clone());
                     break;
                 }
             }
-            if max_score_achieved && !min_score_achieved {
+            if max_score_achieved && !loss_in_sight {
                 best_pv = Some(pv_candidate.clone());
                 if *score != -player as i32 * MAX_SCORE {
                     if !pv_last_iter.is_empty() {
@@ -647,18 +646,8 @@ fn evaluate_board(board: &[Vec<i8>], player_to_move: i8) -> i32 {
     }
     // println!("Triangle for white: {}", length_triangle_white);
     // println!("Triangle for black: {}", length_triangle_black);
-    if length_triangle_black < length_triangle_white {
-        // println!("Triangle for black");
-        return LOSS_BY_TRIANGLE;
-    } else if length_triangle_black > length_triangle_white {
-        // println!("Triangle for white");
-        return WIN_BY_TRIANGLE;
-    } else if length_triangle_black != ROWS && length_triangle_white != ROWS {
-        if player_to_move == -1 {
-            return WIN_BY_TRIANGLE;
-        } else {
-            return LOSS_BY_TRIANGLE;
-        }
+    if length_triangle_black != ROWS || length_triangle_white != ROWS {
+        return (2 * (length_triangle_black - length_triangle_white) as i32 - player_to_move as i32) * WIN_BY_TRIANGLE;
     }
     score
 }
