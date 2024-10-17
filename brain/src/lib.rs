@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use std::time::{Instant, Duration};
+use lru::LruCache;
 
 const ROWS: usize = 9;
 const COLS: usize = 9;
@@ -17,6 +18,7 @@ const MIN_SCORE: i32 = -MAX_SCORE;
 const DRAW_SCORE: i32 = -30;
 // const LOSS_BY_TRIANGLE: i32 = -MAX_SCORE/2;
 const WIN_BY_TRIANGLE: i32 = 50_000;
+const MAX_TT_SIZE: usize = 15_000_000;
 
 // Define the possible flags for entries
 #[derive(Debug, Clone, Copy)]
@@ -35,7 +37,7 @@ struct TTEntry {
     flag: TTFlag,
 }
 
-type TranspositionTable = HashMap<u64, TTEntry>;
+type TranspositionTable = LruCache<u64, TTEntry>;
 
 #[pyclass]
 struct FiancoAI {
@@ -63,7 +65,7 @@ impl FiancoAI {
         }
 
         FiancoAI {
-            tt: HashMap::new(),
+            tt: LruCache::new(MAX_TT_SIZE),
             zobrist_table,
             current_hash_key: 0,
             hash_history: Vec::new(),
@@ -392,7 +394,7 @@ impl FiancoAI {
             depth,
             flag,
         };
-        self.tt.insert(key, entry);
+        self.tt.put(key, entry);
 
         if is_root && !best_pv.is_empty() {
             // At root, store the move's score for ordering
