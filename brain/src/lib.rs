@@ -15,7 +15,7 @@ const MAX_SCORE: i32 = 1_000_000;
 const MIN_SCORE: i32 = -MAX_SCORE;
 const DRAW_SCORE: i32 = -30;
 const WIN_BY_TRIANGLE: i32 = 50_000;
-const MAX_TT_SIZE: usize = 20_000_000; // Adjust as needed
+const MAX_TT_SIZE: usize = 30_000_000; // Adjust as needed
 
 // Define the possible flags for entries
 #[derive(Debug, Clone, Copy)]
