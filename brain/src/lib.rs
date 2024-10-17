@@ -17,6 +17,7 @@ const MIN_SCORE: i32 = -MAX_SCORE;
 const DRAW_SCORE: i32 = -30;
 // const LOSS_BY_TRIANGLE: i32 = -MAX_SCORE/2;
 const WIN_BY_TRIANGLE: i32 = 50_000;
+const MAX_TT_SIZE: usize = 20_000_000; //INCREASE WHEN PLAYING AGAINST ANOTHER PLAYER
 
 // Define the possible flags for entries
 #[derive(Debug, Clone, Copy)]
@@ -95,6 +96,11 @@ impl FiancoAI {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 "Invalid board shape. Expected 9x9 array.",
             ));
+        }
+
+        if self.tt.len() >= MAX_TT_SIZE {
+            self.tt.clear();
+            println!("Transposition Table cleared.");
         }
 
         // Convert the ndarray to Vec<Vec<i8>>

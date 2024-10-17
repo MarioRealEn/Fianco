@@ -1,7 +1,7 @@
 import numpy as np
 from fianco_brain import FiancoAI  # Import the Rust AI function
 
-time = 10
+time = 8
 
 class AIController:
     def __init__(self, player, game, depth=6):
@@ -29,6 +29,7 @@ class AIController:
         except ValueError:
             self.game.export_position()
             raise NotImplementedError("AI has no valid moves.")
+        
 
 
 class ExportController:
