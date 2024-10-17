@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use std::time::{Instant, Duration};
+use ndarray::ArrayView2;
 
 const ROWS: usize = 9;
 const COLS: usize = 9;
@@ -17,7 +18,7 @@ const MIN_SCORE: i32 = -MAX_SCORE;
 const DRAW_SCORE: i32 = -30;
 // const LOSS_BY_TRIANGLE: i32 = -MAX_SCORE/2;
 const WIN_BY_TRIANGLE: i32 = 50_000;
-const MAX_TT_SIZE: usize = 20_000_000; //INCREASE WHEN PLAYING AGAINST ANOTHER PLAYER
+const MAX_TT_SIZE: usize = 40_000_000; //INCREASE WHEN PLAYING AGAINST ANOTHER PLAYER
 
 // Define the possible flags for entries
 #[derive(Debug, Clone, Copy)]
@@ -37,6 +38,7 @@ struct TTEntry {
 }
 
 type TranspositionTable = HashMap<u64, TTEntry>;
+type Board = [[i8; COLS]; ROWS];
 
 #[pyclass]
 struct FiancoAI {
@@ -104,10 +106,7 @@ impl FiancoAI {
         }
 
         // Convert the ndarray to Vec<Vec<i8>>
-        let mut board_state: Vec<Vec<i8>> = board_state
-            .outer_iter()
-            .map(|row| row.to_vec())
-            .collect();
+        let mut board_state: Board = pyarray_to_board(board)?;
 
         // Get valid moves
         let valid_moves = get_valid_moves(&board_state, player);
@@ -171,6 +170,7 @@ impl FiancoAI {
 
         // println!("hash_history after negamax: {:?}", self.hash_history);
         }
+        println!("Time: {}", start_time.elapsed().as_secs_f64());
 
         let loss_in_sight = depth_results.iter().any(|&(_, score, _)| player as i32 * score >= WIN_BY_TRIANGLE);
         let max_score_achieved = depth_results.iter().any(|&(_, score, _)| score == -player as i32 * MAX_SCORE);
@@ -228,17 +228,13 @@ impl FiancoAI {
     //     Ok(get_valid_moves(&board_state, player))
     // }
 
-    fn evaluate_board_python(&mut self, board: &PyArray2<i8>, player: i8) -> i32 {
-        // Convert the ndarray to Vec<Vec<i8>>
-        let board_readonly = board.readonly();
-        let board_state: Vec<Vec<i8>> = board_readonly
-            .as_array()
-            .outer_iter()
-            .map(|row| row.to_vec())
-            .collect();
+    // fn evaluate_board_python(&mut self, board: &PyArray2<i8>, player: i8) -> i32 {
+    //     // Convert the ndarray to Vec<Vec<i8>>
+    //     let board_readonly = board.readonly();
+    //     let board_state: Board = pyarray_to_board(board)?;
 
-        evaluate_board(&board_state, player)
-    }
+    //     evaluate_board(&board_state, player)
+    // }
     #[pyo3(name = "get_tt_size")]
     fn get_tt_size(&self) -> PyResult<usize> {
         Ok(self.tt.len())
@@ -248,7 +244,7 @@ impl FiancoAI {
 impl FiancoAI {
     fn negamax(
         &mut self,
-        board: &mut Vec<Vec<i8>>,
+        board: &mut Board,
         depth: i32,
         player: i8,
         mut alpha: i32,
@@ -407,7 +403,7 @@ impl FiancoAI {
 
         Ok((max_eval, best_pv))
     }
-    fn compute_hash_key(&self, board: &[Vec<i8>]) -> u64 {
+    fn compute_hash_key(&self, board: &Board) -> u64 {
         let mut hash_key = 0u64;
         for i in 0..ROWS {
             for j in 0..COLS {
@@ -422,7 +418,7 @@ impl FiancoAI {
     }
     fn make_move(
         &mut self,
-        board: &mut Vec<Vec<i8>>,
+        board: &mut Board,
         player: i8,
         mv: (usize, usize, usize, usize),
         hash_key: &mut u64,
@@ -468,7 +464,7 @@ impl FiancoAI {
     }
     fn undo_move(
         &mut self,
-        board: &mut Vec<Vec<i8>>,
+        board: &mut Board,
         player: i8,
         mv: (usize, usize, usize, usize),
         captured: bool,
@@ -512,9 +508,32 @@ impl FiancoAI {
 //     board.hash(&mut hasher);
 //     hasher.finish()
 // }
+fn pyarray_to_board(py_array: &PyArray2<i8>) -> PyResult<Board> {
+    // Obtain an immutable view of the NumPy array
+    let binding = py_array.readonly();
+    let board_view: ArrayView2<i8> = binding.as_array();
 
+    // Check if the array has the correct shape
+    if board_view.shape() != [ROWS, COLS] {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            format!("Invalid board shape: expected [{} x {}], got {:?}", ROWS, COLS, board_view.shape()),
+        ));
+    }
 
-fn get_valid_moves(board: &[Vec<i8>], player: i8) -> Vec<(usize, usize, usize, usize)> {
+    // Initialize the Board
+    let mut board: Board = [[0; COLS]; ROWS];
+
+    // Copy data from the NumPy array to the Board
+    for i in 0..ROWS {
+        for j in 0..COLS {
+            board[i][j] = board_view[[i, j]];
+        }
+    }
+
+    Ok(board)
+}
+
+fn get_valid_moves(board: &Board, player: i8) -> Vec<(usize, usize, usize, usize)> {
     let captures = get_possible_captures(board, player);
     if !captures.is_empty() {
         captures
@@ -524,7 +543,7 @@ fn get_valid_moves(board: &[Vec<i8>], player: i8) -> Vec<(usize, usize, usize, u
 }
 
 fn get_possible_captures(
-    board: &[Vec<i8>],
+    board: &Board,
     player: i8,
 ) -> Vec<(usize, usize, usize, usize)> {
     let mut captures = Vec::new();
@@ -573,7 +592,7 @@ fn get_possible_captures(
 }
 
 fn get_all_possible_moves(
-    board: &[Vec<i8>],
+    board: &Board,
     player: i8,
 ) -> Vec<(usize, usize, usize, usize)> {
     let mut moves = Vec::new();
@@ -607,7 +626,7 @@ fn get_all_possible_moves(
 }
 
 #[inline]
-fn evaluate_board(board: &[Vec<i8>], player_to_move: i8) -> i32 {
+fn evaluate_board(board: &Board, player_to_move: i8) -> i32 {
     // if is_game_over(board, 1) {
     //     return MAX_SCORE;
     // } 
@@ -690,7 +709,7 @@ fn evaluate_board(board: &[Vec<i8>], player_to_move: i8) -> i32 {
 // }
 
 #[inline]
-fn triangle_to_win(board: &[Vec<i8>], player_to_move: i8, player: i8, i: usize, j: usize) -> bool {
+fn triangle_to_win(board: &Board, player_to_move: i8, player: i8, i: usize, j: usize) -> bool {
     // Convert indices to i32 for calculations
     let i = i as i32;
     let j = j as i32;
@@ -734,7 +753,7 @@ fn triangle_to_win(board: &[Vec<i8>], player_to_move: i8, player: i8, i: usize, 
     true
 }
 
-fn is_game_over(board: &[Vec<i8>], player: i8) -> bool {
+fn is_game_over(board: &Board, player: i8) -> bool {
     // Check if any of player's pieces reached the opposite end
     if is_winner(board, -player) {
         return true;
@@ -743,7 +762,7 @@ fn is_game_over(board: &[Vec<i8>], player: i8) -> bool {
     get_valid_moves(board, player).is_empty()
 }
 
-fn is_winner(board: &[Vec<i8>], player: i8) -> bool {
+fn is_winner(board: &Board, player: i8) -> bool {
     let target_row = if player == 1 { ROWS - 1 } else { 0 };
     for j in 0..COLS {
         if board[target_row][j] == player {

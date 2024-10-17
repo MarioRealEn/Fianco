@@ -19,7 +19,7 @@ def main():
 ], dtype=np.int8)
     fianco = game.FiancoGame()
     # Example: Set Black player to be controlled by AI
-    fianco.player_types[1] = 'ai20'
+    fianco.player_types[1] = 'ai8'
     # fianco.player_types[-1] = 'ai20'
     # Initialize controllers for AI players
     for player, p_type in fianco.player_types.items():
