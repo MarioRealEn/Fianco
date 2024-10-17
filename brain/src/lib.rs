@@ -177,6 +177,8 @@ impl FiancoAI {
             }
         }
 
+        println!("Time: {}", start_time.elapsed().as_secs_f64());
+
         let loss_in_sight = depth_results.iter().any(|&(_, score, _)| player as i32 * score >= WIN_BY_TRIANGLE);
         let max_score_achieved = depth_results.iter().any(|&(_, score, _)| score == -player as i32 * MAX_SCORE);
 
