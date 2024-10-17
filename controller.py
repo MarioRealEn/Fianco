@@ -4,14 +4,16 @@ from fianco_brain import FiancoAI  # Import the Rust AI function
 time = 8
 
 class AIController:
-    def __init__(self, player, game, depth=6):
+    def __init__(self, player, game, depth=6, pondering = False):
         self.player = player  # -1 for White, 1 for Black
         self.game = game
         self.depth = depth
         self.ai = FiancoAI(player)
+        self.pondering = pondering
 
     def get_move(self, board_state):
         # Ensure the board_state is a NumPy array of type int8
+
         if not isinstance(board_state, np.ndarray):
             board_state = np.array(board_state, dtype=np.int8)
         else:
@@ -21,12 +23,14 @@ class AIController:
         depth = self.depth  # Adjust search depth as needed
 
         try:
-            pv = self.ai.get_best_move(board_state, player, depth, time)
+            pv = self.ai.get_best_move(board_state, player, depth, time, self.pondering)
+            print(pv)
             best_score = pv[0]
             from_row, from_col, to_row, to_col = pv[1][0] 
             print(f"Current eval: {best_score}")
             return from_row, from_col, to_row, to_col
         except ValueError:
+            pv = self.ai.get_best_move(board_state, player, depth, time, self.pondering)
             self.game.export_position()
             raise NotImplementedError("AI has no valid moves.")
         

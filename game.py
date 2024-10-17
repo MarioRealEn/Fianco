@@ -616,6 +616,7 @@ class FiancoGame:
         self.current_player *= -1
 
     def run_game(self):
+        
         self.draw_board()
         while True:
             self.clock.tick(60)

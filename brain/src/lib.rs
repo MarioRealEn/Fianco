@@ -1,23 +1,20 @@
 use numpy::PyArray2;
 use pyo3::prelude::*;
-
-// use core::hash;
 use std::cmp::{max, min};
 use std::collections::HashMap;
-// use std::hash::{Hash, Hasher};
-// use std::collections::hash_map::DefaultHasher;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use std::time::{Instant, Duration};
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::thread;
 
 const ROWS: usize = 9;
 const COLS: usize = 9;
 const MAX_SCORE: i32 = 1_000_000;
 const MIN_SCORE: i32 = -MAX_SCORE;
 const DRAW_SCORE: i32 = -30;
-// const LOSS_BY_TRIANGLE: i32 = -MAX_SCORE/2;
 const WIN_BY_TRIANGLE: i32 = 50_000;
-const MAX_TT_SIZE: usize = 20_000_000; //INCREASE WHEN PLAYING AGAINST ANOTHER PLAYER
+const MAX_TT_SIZE: usize = 20_000_000; // Adjust as needed
 
 // Define the possible flags for entries
 #[derive(Debug, Clone, Copy)]
@@ -40,12 +37,14 @@ type TranspositionTable = HashMap<u64, TTEntry>;
 
 #[pyclass]
 struct FiancoAI {
-    tt: TranspositionTable,
-    zobrist_table: Vec<Vec<[u64; 2]>>, // [ROWS][COLS][2]
+    tt: Arc<Mutex<TranspositionTable>>,
+    zobrist_table: Arc<Vec<Vec<[u64; 2]>>>, // [ROWS][COLS][2]
     current_hash_key: u64,
     hash_history: Vec<u64>,
     ai_player: i8,
     root_move_scores: HashMap<(usize, usize, usize, usize), i32>,
+    pondering_thread: Option<thread::JoinHandle<()>>,
+    pondering_stop_flag: Arc<AtomicBool>,
 }
 
 #[pymethods]
@@ -54,7 +53,7 @@ impl FiancoAI {
     fn new(ai_player: i8) -> Self {
         // Initialize the zobrist_table with random numbers
         let mut rng = StdRng::seed_from_u64(0);
-        let mut zobrist_table: Vec<Vec<[u64; 2]>> = vec![vec![[0u64; 2]; COLS]; ROWS]; // [ROWS][COLS][2]
+        let mut zobrist_table: Vec<Vec<[u64; 2]>> = vec![vec![[0u64; 2]; COLS]; ROWS];
         for i in 0..ROWS {
             for j in 0..COLS {
                 for k in 0..2 {
@@ -64,12 +63,14 @@ impl FiancoAI {
         }
 
         FiancoAI {
-            tt: HashMap::new(),
-            zobrist_table,
+            tt: Arc::new(Mutex::new(HashMap::new())),
+            zobrist_table: Arc::new(zobrist_table),
             current_hash_key: 0,
             hash_history: Vec::new(),
             ai_player: ai_player,
             root_move_scores: HashMap::new(),
+            pondering_thread: None,
+            pondering_stop_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -80,11 +81,17 @@ impl FiancoAI {
         player: i8,
         max_depth: i32,
         max_time: u64,
+        pondering: bool,
     ) -> PyResult<(i32, Vec<(usize, usize, usize, usize)>)> {
+        // Stop pondering if it's running
+        self.stop_pondering().ok();
+
+        println!("Transposition Table size: {}", self.tt.lock().unwrap().len());
+
         // Safely access the board data
         let board_readonly = board.readonly();
         let board_state = board_readonly.as_array();
-        let mut best_score= 505;
+        let mut best_score = 505;
         let mut pv = Vec::new();
         let mut depth_results: Vec<(i32, i32, Vec<(usize, usize, usize, usize)>)> = Vec::new();
 
@@ -96,11 +103,6 @@ impl FiancoAI {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 "Invalid board shape. Expected 9x9 array.",
             ));
-        }
-
-        if self.tt.len() >= MAX_TT_SIZE {
-            self.tt.clear();
-            println!("Transposition Table cleared.");
         }
 
         // Convert the ndarray to Vec<Vec<i8>>
@@ -119,6 +121,10 @@ impl FiancoAI {
             ));
         }
 
+        if valid_moves.is_empty() {
+            println!("I checked and there are no valid moves")
+        }
+
         self.current_hash_key = self.compute_hash_key(&board_state);
 
         // Push the current hash key onto the stack
@@ -126,10 +132,17 @@ impl FiancoAI {
 
         // Initialize root_move_scores
         self.root_move_scores.clear();
-        // self.tt.clear(); //ERASE THIS!!
+
+        // Check TT size and clear if necessary
+        {
+            let mut tt = self.tt.lock().unwrap();
+            if tt.len() >= MAX_TT_SIZE {
+                tt.clear();
+                println!("Transposition Table cleared.");
+            }
+        }
 
         for depth in 1..=max_depth {
-
             if start_time.elapsed() >= max_time {
                 println!("Time limit reached. Breaking out of the search loop.");
                 break;
@@ -137,9 +150,6 @@ impl FiancoAI {
 
             // Copy the current hash key
             let mut hash_key = self.current_hash_key;
-
-            
-            // println!("hash_history before negamax: {:?}", self.hash_history);
 
             // Call the Negamax algorithm with the Transposition Table
             let result = self.negamax(
@@ -152,24 +162,22 @@ impl FiancoAI {
                 true,
                 &start_time,
                 max_time,
+                false,
             );
-        
+
             match result {
                 Ok((score, pv_current)) => {
                     best_score = -player as i32 * score;
                     pv = pv_current.clone();
                     depth_results.push((depth, best_score, pv_current.clone()));
                     println!("Depth {}: Best Score = {}, PV = {:?}", depth, best_score, pv);
-                },
+                }
                 Err(_) => {
                     // Time limit reached during negamax; break out of the loop
                     println!("Time limit reached during negamax. Breaking out of the search loop.");
                     break;
-                },
+                }
             }
-            
-
-        // println!("hash_history after negamax: {:?}", self.hash_history);
         }
 
         let loss_in_sight = depth_results.iter().any(|&(_, score, _)| player as i32 * score >= WIN_BY_TRIANGLE);
@@ -204,6 +212,21 @@ impl FiancoAI {
         }
         // Return the best move and evaluation score if available
         if let Some(&(_from_row, _from_col, _to_row, _to_col)) = pv.first() {
+            println!("Transposition Table size: {}", self.tt.lock().unwrap().len());
+            if pondering {
+                // Simulate the move to get the updated board state
+                let mut new_board_state = board_state.clone();
+                let mut new_hash_key = self.current_hash_key;
+                self.make_move(&mut new_board_state, player, pv[0], &mut new_hash_key);
+    
+                // Start pondering for the next move
+                self.start_pondering(
+                    &new_board_state,
+                    -player,
+                    max_depth,
+                    Duration::new(20, 0),
+                )?;
+            }
             Ok((best_score, pv))
         } else {
             Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -228,6 +251,18 @@ impl FiancoAI {
     //     Ok(get_valid_moves(&board_state, player))
     // }
 
+    fn stop_pondering(&mut self) -> PyResult<()> {
+        // Signal the pondering thread to stop
+        if let Some(_) = self.pondering_thread {
+            self.pondering_stop_flag.store(true, Ordering::Relaxed);
+            // Wait for the thread to finish
+            if let Some(handle) = self.pondering_thread.take() {
+                let _ = handle.join();
+            }
+        }
+        Ok(())
+    }
+
     fn evaluate_board_python(&mut self, board: &PyArray2<i8>, player: i8) -> i32 {
         // Convert the ndarray to Vec<Vec<i8>>
         let board_readonly = board.readonly();
@@ -241,7 +276,8 @@ impl FiancoAI {
     }
     #[pyo3(name = "get_tt_size")]
     fn get_tt_size(&self) -> PyResult<usize> {
-        Ok(self.tt.len())
+        let tt = self.tt.lock().unwrap();
+        Ok(tt.len())
     }
 }
 
@@ -257,15 +293,20 @@ impl FiancoAI {
         is_root: bool,
         start_time: &Instant,
         max_time: Duration,
+        pondering: bool, //If this is a pondering run, set to True
     ) -> Result<(i32, Vec<(usize, usize, usize, usize)>), ()> {
+        // Check the stop flag
+        if pondering && self.pondering_stop_flag.load(Ordering::Relaxed) {
+            println!("Stop signal received during recursive call.");
+            return Err(());
+        }
+
         let key = *hash_key;
         let old_alpha = alpha;
         let mut old_best_move: Option<(usize, usize, usize, usize)> = None;
 
-        // Push the current hash key onto the stack
-        // self.hash_history.push(key);
-
         if start_time.elapsed() >= max_time {
+            println!("Time limit reached during recursive call.");
             return Err(());
         }
 
@@ -274,13 +315,11 @@ impl FiancoAI {
 
         // Check for threefold repetition
         if repetitions >= 3 {
-            // self.hash_history.pop(); // Remove the hash key before returning
-            // println!("Popped hash key due to threefold repetition");
-            // println!("Threefold repetition detected.");
             return Ok((-self.ai_player as i32 * DRAW_SCORE, Vec::new())); // Return a score indicating a draw
-        } else if repetitions == 0{
+        } else if repetitions == 0 {
             // Transposition Table lookup
-            if let Some(entry) = self.tt.get(&key) {
+            let tt = self.tt.lock().unwrap();
+            if let Some(entry) = tt.get(&key) {
                 if entry.depth >= depth {
                     match entry.flag {
                         TTFlag::Exact => {
@@ -288,16 +327,12 @@ impl FiancoAI {
                             if let Some(best_move) = entry.best_move {
                                 pv.push(best_move);
                             }
-                            // self.hash_history.pop(); // Remove the hash key before returning
-                            // println!("Popped hash key due to TT Exact");
                             return Ok((entry.eval, pv));
-                        },
+                        }
                         TTFlag::LowerBound => alpha = max(alpha, entry.eval),
                         TTFlag::UpperBound => beta = min(beta, entry.eval),
                     }
                     if alpha >= beta {
-                        // self.hash_history.pop(); // Remove the hash key before returning
-                        // println!("Popped hash key due to TT alpha >= beta");
                         return Ok((entry.eval, Vec::new()));
                     }
                 }
@@ -305,12 +340,12 @@ impl FiancoAI {
                     old_best_move = entry.best_move;
                 }
             }
+            drop(tt); // Release the lock
         }
 
         // Check for depth or game over
         if depth == 0 || is_game_over(board, player) {
             let eval = -player as i32 * evaluate_board(board, player);
-            // self.hash_history.pop(); // Remove the hash key before returning
             return Ok((eval, Vec::new()));
         }
 
@@ -340,8 +375,6 @@ impl FiancoAI {
             // Make the move and update hash key
             let capture = self.make_move(board, player, m, hash_key);
 
-            
-
             let new_depth = if capture { depth } else { depth - 1 };
 
             // Recursive call
@@ -355,15 +388,16 @@ impl FiancoAI {
                 false,
                 start_time,
                 max_time,
+                pondering,
             );
-        
+
             // Undo the move and restore hash key
             self.undo_move(board, player, m, capture, hash_key);
-        
+
             match result {
                 Ok((eval, pv)) => {
                     let eval = -eval;
-        
+
                     if eval > max_eval {
                         max_eval = eval;
                         best_pv = pv;
@@ -373,14 +407,13 @@ impl FiancoAI {
                     if alpha >= beta {
                         break; // Beta cutoff
                     }
-                },
+                }
                 Err(_) => {
-                    // Time limit reached during recursive call
+                    // Time limit reached or stop signal received during recursive call
                     return Err(());
-                },
+                }
             }
         }
-
 
         // Determine the flag for the transposition table entry
         let flag = if max_eval <= old_alpha {
@@ -398,7 +431,10 @@ impl FiancoAI {
             depth,
             flag,
         };
-        self.tt.insert(key, entry);
+
+        let mut tt = self.tt.lock().unwrap();
+        tt.insert(key, entry);
+        drop(tt); // Release the lock
 
         if is_root && !best_pv.is_empty() {
             // At root, store the move's score for ordering
@@ -407,6 +443,82 @@ impl FiancoAI {
 
         Ok((max_eval, best_pv))
     }
+
+    fn start_pondering(
+        &mut self,
+        board: &Vec<Vec<i8>>,
+        player: i8,
+        max_depth: i32,
+        max_duration: Duration,
+    ) -> PyResult<()> {
+        // Check if pondering is already running
+        if self.pondering_thread.is_some() {
+            return Ok(()); // Already pondering
+        }
+        println!("Starting pondering thread...");
+
+        // Reset the stop flag
+        self.pondering_stop_flag.store(false, Ordering::Relaxed);
+
+        // Clone necessary data for the thread
+        let mut board_state = board.clone();
+        let tt_clone = Arc::clone(&self.tt);
+        let zobrist_table_clone = Arc::clone(&self.zobrist_table);
+        let stop_flag = Arc::clone(&self.pondering_stop_flag);
+        let ai_player = self.ai_player;
+
+        // Start the pondering thread
+        self.pondering_thread = Some(thread::spawn(move || {
+            let mut ai = FiancoAI {
+                tt: tt_clone,
+                zobrist_table: zobrist_table_clone,
+                current_hash_key: 0,
+                hash_history: Vec::new(),
+                ai_player,
+                root_move_scores: HashMap::new(),
+                pondering_thread: None,
+                pondering_stop_flag: stop_flag,
+            };
+
+            let start_time = Instant::now();
+
+            ai.current_hash_key = ai.compute_hash_key(&board_state);
+
+            // Run the search loop
+            for depth in 1..=max_depth {
+                if ai.pondering_stop_flag.load(Ordering::Relaxed) {
+                    // Stop signal received
+                    break;
+                }
+                if start_time.elapsed() >= max_duration {
+                    break;
+                }
+
+                // Copy the current hash key
+                let mut hash_key = ai.current_hash_key;
+
+                // Call negamax
+                let result = ai.negamax(
+                    &mut board_state,
+                    depth,
+                    player,
+                    MIN_SCORE,
+                    MAX_SCORE,
+                    &mut hash_key,
+                    true,
+                    &start_time,
+                    max_duration,
+                    true
+                );
+
+                println!("Pondering depth {}: {:?}", depth, result);
+                // In the pondering thread, we may not need to store the result
+            }
+        }));
+
+        Ok(())
+    }
+
     fn compute_hash_key(&self, board: &[Vec<i8>]) -> u64 {
         let mut hash_key = 0u64;
         for i in 0..ROWS {
