@@ -8,6 +8,7 @@ use std::collections::HashMap;
 // use std::collections::hash_map::DefaultHasher;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use std::time::{Instant, Duration};
 
 const ROWS: usize = 9;
 const COLS: usize = 9;
@@ -77,6 +78,7 @@ impl FiancoAI {
         board: &PyArray2<i8>,
         player: i8,
         max_depth: i32,
+        max_time: u64,
     ) -> PyResult<(i32, Vec<(usize, usize, usize, usize)>)> {
         // Safely access the board data
         let board_readonly = board.readonly();
@@ -84,6 +86,9 @@ impl FiancoAI {
         let mut best_score= 505;
         let mut pv = Vec::new();
         let mut depth_results: Vec<(i32, i32, Vec<(usize, usize, usize, usize)>)> = Vec::new();
+
+        let start_time = Instant::now();
+        let max_time = Duration::new(max_time, 0);
 
         // Validate board shape
         if board_state.shape() != [ROWS, COLS] {
@@ -119,6 +124,11 @@ impl FiancoAI {
 
         for depth in 1..=max_depth {
 
+            if start_time.elapsed() >= max_time {
+                println!("Time limit reached. Breaking out of the search loop.");
+                break;
+            }
+
             // Copy the current hash key
             let mut hash_key = self.current_hash_key;
 
@@ -126,21 +136,31 @@ impl FiancoAI {
             // println!("hash_history before negamax: {:?}", self.hash_history);
 
             // Call the Negamax algorithm with the Transposition Table
-            let (score, pv_current) = self.negamax(
-                &mut board_state, // SHOULD I CLONE?
+            let result = self.negamax(
+                &mut board_state,
                 depth,
                 player,
                 MIN_SCORE,
                 MAX_SCORE,
                 &mut hash_key,
                 true,
+                &start_time,
+                max_time,
             );
-            best_score = -player as i32 * score;
-            pv = pv_current.clone();
-            
-            depth_results.push((depth, best_score, pv_current.clone()));
-            
-            println!("Depth {}: Best Score = {}, PV = {:?}", depth, best_score, pv);
+        
+            match result {
+                Ok((score, pv_current)) => {
+                    best_score = -player as i32 * score;
+                    pv = pv_current.clone();
+                    depth_results.push((depth, best_score, pv_current.clone()));
+                    println!("Depth {}: Best Score = {}, PV = {:?}", depth, best_score, pv);
+                },
+                Err(_) => {
+                    // Time limit reached during negamax; break out of the loop
+                    println!("Time limit reached during negamax. Breaking out of the search loop.");
+                    break;
+                },
+            }
             
 
         // println!("hash_history after negamax: {:?}", self.hash_history);
@@ -214,6 +234,10 @@ impl FiancoAI {
 
         evaluate_board(&board_state, player)
     }
+    #[pyo3(name = "get_tt_size")]
+    fn get_tt_size(&self) -> PyResult<usize> {
+        Ok(self.tt.len())
+    }
 }
 
 impl FiancoAI {
@@ -226,13 +250,19 @@ impl FiancoAI {
         mut beta: i32,
         hash_key: &mut u64,
         is_root: bool,
-    ) -> (i32, Vec<(usize, usize, usize, usize)>) {
+        start_time: &Instant,
+        max_time: Duration,
+    ) -> Result<(i32, Vec<(usize, usize, usize, usize)>), ()> {
         let key = *hash_key;
         let old_alpha = alpha;
         let mut old_best_move: Option<(usize, usize, usize, usize)> = None;
 
         // Push the current hash key onto the stack
         // self.hash_history.push(key);
+
+        if start_time.elapsed() >= max_time {
+            return Err(());
+        }
 
         // Count how many times the current position has occurred in the current path
         let repetitions = self.hash_history.iter().filter(|&&k| k == key).count();
@@ -241,8 +271,8 @@ impl FiancoAI {
         if repetitions >= 3 {
             // self.hash_history.pop(); // Remove the hash key before returning
             // println!("Popped hash key due to threefold repetition");
-            println!("Threefold repetition detected.");
-            return (-self.ai_player as i32 * DRAW_SCORE, Vec::new()); // Return a score indicating a draw
+            // println!("Threefold repetition detected.");
+            return Ok((-self.ai_player as i32 * DRAW_SCORE, Vec::new())); // Return a score indicating a draw
         } else if repetitions == 0{
             // Transposition Table lookup
             if let Some(entry) = self.tt.get(&key) {
@@ -255,7 +285,7 @@ impl FiancoAI {
                             }
                             // self.hash_history.pop(); // Remove the hash key before returning
                             // println!("Popped hash key due to TT Exact");
-                            return (entry.eval, pv);
+                            return Ok((entry.eval, pv));
                         },
                         TTFlag::LowerBound => alpha = max(alpha, entry.eval),
                         TTFlag::UpperBound => beta = min(beta, entry.eval),
@@ -263,7 +293,7 @@ impl FiancoAI {
                     if alpha >= beta {
                         // self.hash_history.pop(); // Remove the hash key before returning
                         // println!("Popped hash key due to TT alpha >= beta");
-                        return (entry.eval, Vec::new());
+                        return Ok((entry.eval, Vec::new()));
                     }
                 }
                 if entry.best_move.is_some() {
@@ -276,7 +306,7 @@ impl FiancoAI {
         if depth == 0 || is_game_over(board, player) {
             let eval = -player as i32 * evaluate_board(board, player);
             // self.hash_history.pop(); // Remove the hash key before returning
-            return (eval, Vec::new());
+            return Ok((eval, Vec::new()));
         }
 
         let mut max_eval = -std::i32::MAX;
@@ -310,21 +340,39 @@ impl FiancoAI {
             let new_depth = if capture { depth } else { depth - 1 };
 
             // Recursive call
-            let (eval, pv) = self.negamax(board, new_depth, -player, -beta, -alpha, hash_key, false);
-            let eval = -eval;
-
+            let result = self.negamax(
+                board,
+                new_depth,
+                -player,
+                -beta,
+                -alpha,
+                hash_key,
+                false,
+                start_time,
+                max_time,
+            );
+        
             // Undo the move and restore hash key
             self.undo_move(board, player, m, capture, hash_key);
-            
-
-            if eval > max_eval {
-                max_eval = eval;
-                best_pv = pv;
-                best_pv.insert(0, m); // Prepend the current move to the PV
-            }
-            alpha = max(alpha, eval);
-            if alpha >= beta {
-                break; // Beta cutoff
+        
+            match result {
+                Ok((eval, pv)) => {
+                    let eval = -eval;
+        
+                    if eval > max_eval {
+                        max_eval = eval;
+                        best_pv = pv;
+                        best_pv.insert(0, m); // Prepend the current move to the PV
+                    }
+                    alpha = max(alpha, eval);
+                    if alpha >= beta {
+                        break; // Beta cutoff
+                    }
+                },
+                Err(_) => {
+                    // Time limit reached during recursive call
+                    return Err(());
+                },
             }
         }
 
@@ -352,7 +400,7 @@ impl FiancoAI {
             self.root_move_scores.insert(best_pv[0], max_eval);
         }
 
-        (max_eval, best_pv)
+        Ok((max_eval, best_pv))
     }
     fn compute_hash_key(&self, board: &[Vec<i8>]) -> u64 {
         let mut hash_key = 0u64;
@@ -555,11 +603,11 @@ fn get_all_possible_moves(
 
 #[inline]
 fn evaluate_board(board: &[Vec<i8>], player_to_move: i8) -> i32 {
-    if is_game_over(board, 1) {
-        return MAX_SCORE;
-    } 
-    if is_game_over(board, -1) {
-        return MIN_SCORE;
+    // if is_game_over(board, 1) {
+    //     return MAX_SCORE;
+    // } 
+    if is_game_over(board, player_to_move) {
+        return player_to_move as i32 * MAX_SCORE;
     }
     // Calculate the score based on the maximizer's perspective
     let mut score = 0;
@@ -570,7 +618,7 @@ fn evaluate_board(board: &[Vec<i8>], player_to_move: i8) -> i32 {
         for j in 0..COLS {
             match board[i][j] {
                 -1 => {
-                    if new_triangle_to_win(board, player_to_move,-1, i, j) {
+                    if triangle_to_win(board, player_to_move,-1, i, j) {
                         length_triangle_white = std::cmp::min(length_triangle_white, i);
                         triangle_found = true;
                         continue;
@@ -582,7 +630,7 @@ fn evaluate_board(board: &[Vec<i8>], player_to_move: i8) -> i32 {
                     }
                 },
                 1 => {
-                    if new_triangle_to_win(board, player_to_move, 1, i, j) {
+                    if triangle_to_win(board, player_to_move, 1, i, j) {
                         length_triangle_black = std::cmp::min(length_triangle_black, ROWS - i - 1 as usize);
                         triangle_found = true;
                         continue;
@@ -605,43 +653,49 @@ fn evaluate_board(board: &[Vec<i8>], player_to_move: i8) -> i32 {
     } else if length_triangle_black > length_triangle_white {
         // println!("Triangle for white");
         return WIN_BY_TRIANGLE;
+    } else if length_triangle_black != ROWS && length_triangle_white != ROWS {
+        if player_to_move == -1 {
+            return WIN_BY_TRIANGLE;
+        } else {
+            return LOSS_BY_TRIANGLE;
+        }
     }
     score
 }
 
-fn triangle_to_win(board: &[Vec<i8>], player: i8, i: usize, j: usize) -> bool {
-    let i = i as isize;
-    let j = j as isize;
-    let rows = ROWS as isize;
-    let cols = COLS as isize;
+// fn triangle_to_win(board: &[Vec<i8>], player: i8, i: usize, j: usize) -> bool {
+//     let i = i as isize;
+//     let j = j as isize;
+//     let rows = ROWS as isize;
+//     let cols = COLS as isize;
 
-    let (i1, i2) = if player == 1 {
-        (i + 1, rows - 1)
-    } else {
-        // if i == 0 {
-        //     println!("i is zero: {}", i);
-        // }
-        (0, if i > 0 { i - 1 } else { 0 })
-    };
+//     let (i1, i2) = if player == 1 {
+//         (i + 1, rows - 1)
+//     } else {
+//         // if i == 0 {
+//         //     println!("i is zero: {}", i);
+//         // }
+//         (0, if i > 0 { i - 1 } else { 0 })
+//     };
 
-    for n in i1..=i2 {
-        let delta = player as isize * (n - i ) - 1;
-        let j1 = (j - delta).max(0).min(cols - 1);
-        let j2 = (j + delta).max(0).min(cols - 1);
-        // if j2 < 0 || j1 < 0 {
-        //     println!("j1 or j2 is less than zero: {}, {}", j1, j2);
-        // }
-        for m in j1..=j2 {
-            if board[n as usize][m as usize] == -player {
-                return false;
-            }
-        }
-    }
-    true
-}
+//     for n in i1..=i2 {
+//         let delta = player as isize * (n - i ) - 1;
+//         let j1 = (j - delta).max(0).min(cols - 1);
+//         let j2 = (j + delta).max(0).min(cols - 1);
+//         // if j2 < 0 || j1 < 0 {
+//         //     println!("j1 or j2 is less than zero: {}, {}", j1, j2);
+//         // }
+//         for m in j1..=j2 {
+//             if board[n as usize][m as usize] == -player {
+//                 return false;
+//             }
+//         }
+//     }
+//     true
+// }
 
 #[inline]
-fn new_triangle_to_win(board: &[Vec<i8>], player_to_move: i8, player: i8, i: usize, j: usize) -> bool {
+fn triangle_to_win(board: &[Vec<i8>], player_to_move: i8, player: i8, i: usize, j: usize) -> bool {
     // Convert indices to i32 for calculations
     let i = i as i32;
     let j = j as i32;

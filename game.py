@@ -2,6 +2,8 @@ import pygame
 import numpy as np
 import sys
 from controller import AIController  # Import the Controller class
+import re
+import ast
 
 # Constants
 ROWS, COLS = 9, 9
@@ -27,34 +29,32 @@ MARGIN_COLOR = (150, 150, 150)  # White color for margin
 
 class FiancoGame:
     def __init__(self, 
-                 board = np.array([
-            [ 1,  1,  1,  1,  1,  1,  1,  1,  1],
-            [ 0,  1,  0,  0,  0,  0,  0,  1,  0],
-            [ 0,  0,  1,  0,  0,  0,  1,  0,  0],
-            [ 0,  0,  0,  1,  0,  1,  0,  0,  0],
-            [ 0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [ 0,  0,  0, -1,  0, -1,  0,  0,  0],
-            [ 0,  0, -1,  0,  0,  0, -1,  0,  0],
-            [ 0, -1,  0,  0,  0,  0,  0, -1,  0],
-            [-1, -1, -1, -1, -1, -1, -1, -1, -1]
-        ], dtype=np.int8)):
+                 initial_board= np.array([
+                [ 1,  1,  1,  1,  1,  1,  1,  1,  1],
+                [ 0,  1,  0,  0,  0,  0,  0,  1,  0],
+                [ 0,  0,  1,  0,  0,  0,  1,  0,  0],
+                [ 0,  0,  0,  1,  0,  1,  0,  0,  0],
+                [ 0,  0,  0,  0,  0,  0,  0,  0,  0],
+                [ 0,  0,  0, -1,  0, -1,  0,  0,  0],
+                [ 0,  0, -1,  0,  0,  0, -1,  0,  0],
+                [ 0, -1,  0,  0,  0,  0,  0, -1,  0],
+                [-1, -1, -1, -1, -1, -1, -1, -1, -1]
+            ], dtype=np.int8),):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption('Fianco Game')
         self.clock = pygame.time.Clock()
-        self.initial_board_state = board
-        self.board_state = self.initial_board_state.copy()
-        self.current_player = -1 # White: -1, Black: 1
         self.selected_piece = None
         self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
-        self.white_moves = []
-        self.black_moves = []
         self.game_over = False
         self.font = pygame.font.SysFont('Arial', 18)
         self.large_font = pygame.font.SysFont('Arial', 24, bold=True)
+        self.paused = False
         self.undo_stack = []
         self.redo_stack = []
-        self.paused = False
+        
+        self.current_player = -1 # White: -1, Black: 1
+        
 
         # Player types: 'human' or 'ai'
         self.player_types = {
@@ -103,6 +103,115 @@ class FiancoGame:
             BUTTON_WIDTH * 2 + 10,  # Span two columns
             BUTTON_HEIGHT
         )
+
+        # if export_file:
+        #     # Read the export and get the values
+        #     with open(export_file, 'r') as f:
+        #         export_data = f.read()
+
+        #     # Extract the board state
+        #     board_state_pattern = re.compile(r'board\s*=\s*np\.array\(\s*\[(.*?)\],\s*dtype=np\.int8\)', re.DOTALL)
+        #     board_state_match = board_state_pattern.search(export_data)
+
+        #     if board_state_match:
+        #         board_state_str = board_state_match.group(1)
+        #         # Reconstruct the array string
+        #         board_state_str = '[' + board_state_str.strip() + ']'
+        #         # Safely evaluate the array string
+        #         board_list = ast.literal_eval(board_state_str)
+        #         # Convert to NumPy array
+        #         self.initial_board_state = np.array(board_list, dtype=np.int8)
+        #     else:
+        #         raise ValueError("Board state not found in export file.")
+
+        #     # Extract White Moves
+        #     white_moves_pattern = re.compile(r'White Moves:\n(.*?)\n\n', re.DOTALL)
+        #     white_moves_match = white_moves_pattern.search(export_data)
+
+        #     if white_moves_match:
+        #         white_moves_str = white_moves_match.group(1).strip()
+        #         self.white_moves = ast.literal_eval(white_moves_str)
+        #     else:
+        #         self.white_moves = []
+
+        #     # Extract Black Moves
+        #     black_moves_pattern = re.compile(r'Black Moves:\n(.*)', re.DOTALL)
+        #     black_moves_match = black_moves_pattern.search(export_data)
+
+        #     if black_moves_match:
+        #         black_moves_str = black_moves_match.group(1).strip()
+        #         self.black_moves = ast.literal_eval(black_moves_str)
+        #     else:
+        #         self.black_moves = []
+
+        #     # Initialize board state
+        #     self.board_state = self.initial_board_state.copy()
+
+        #     # Determine the current player
+        #     if len(self.white_moves) == len(self.black_moves):
+        #         self.current_player = -1  # White's turn
+        #     else:
+        #         self.current_player = 1   # Black's turn
+
+        #     from itertools import zip_longest
+
+        #     # Reconstruct the undo stack
+        #     self.undo_stack = []
+        #     self.board_state = self.initial_board_state.copy()
+        #     self.current_player = -1  # Assuming white starts
+        #     self.white_moves_applied = []
+        #     self.black_moves_applied = []
+
+        #     # Interleave the moves correctly
+        #     moves = []
+        #     white_moves_iter = iter(self.white_moves)
+        #     black_moves_iter = iter(self.black_moves)
+
+        #     while True:
+        #         white_move = next(white_moves_iter, None)
+        #         black_move = next(black_moves_iter, None)
+        #         if white_move is not None:
+        #             moves.append((-1, white_move))  # -1 for white
+        #         if black_move is not None:
+        #             moves.append((1, black_move))   # 1 for black
+        #         if white_move is None and black_move is None:
+        #             break
+
+        #     # Apply the moves
+        #     for player, move_str in moves:
+        #         # Parse the move
+        #         from_notation, to_notation = move_str.split('->')
+        #         from_row, from_col = self.notation_to_coord(from_notation)
+        #         to_row, to_col = self.notation_to_coord(to_notation)
+        #         # Save the current state before the move
+        #         self.undo_stack.append((
+        #             self.board_state.copy(),
+        #             self.current_player,
+        #             self.white_moves_applied.copy(),
+        #             self.black_moves_applied.copy()
+        #         ))
+        #         # Set current player to the player making the move
+        #         self.current_player = player
+        #         # Update move lists
+        #         if player == -1:
+        #             self.white_moves_applied.append(move_str)
+        #         else:
+        #             self.black_moves_applied.append(move_str)
+        #         # Make the move
+        #         self.make_move(from_row, from_col, to_row, to_col)
+        #         # Switch player
+        #         self.current_player *= -1  # Prepare for next move
+        #     self.undo_stack.append((
+        #         self.board_state.copy(),
+        #         self.current_player,
+        #         self.white_moves.copy(),
+        #         self.black_moves.copy()
+        #     ))
+        # else:
+        self.initial_board_state = initial_board
+        self.board_state = self.initial_board_state.copy()
+        self.white_moves = []
+        self.black_moves = []
 
     def draw_board(self):
         # Fill background with margin color
@@ -387,6 +496,9 @@ class FiancoGame:
             text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
             self.screen.blit(text, text_rect)
             self.export_position()
+            for player, p_type in self.player_types.items():
+                if p_type[0:2] == 'ai':
+                    print('Player: ', player, ' TT size: ', self.controllers[player].ai.get_tt_size())
             pygame.display.flip()
             pygame.time.wait(3000)
             # pygame.quit()
@@ -476,11 +588,13 @@ class FiancoGame:
                 f.write('[' + ', '.join(map(str, row)) + '],\n')
             f.write('], dtype=np.int8)\n\n')
             f.write('\nWhite Moves:\n')
-            for move in self.white_moves:
-                f.write(move + '\n')
-            f.write('\nBlack Moves:\n')
-            for move in self.black_moves:
-                f.write(move + '\n')
+            f.write("['")
+            f.write("','".join(self.white_moves))
+            f.write("']")
+            f.write('\n\nBlack Moves:\n')
+            f.write("['")
+            f.write("','".join(self.black_moves))
+            f.write("']")
         print('Position exported to fianco_export.txt')
 
     def handle_ai_move(self):

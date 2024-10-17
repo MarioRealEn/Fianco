@@ -1,6 +1,8 @@
 import numpy as np
 from fianco_brain import FiancoAI  # Import the Rust AI function
 
+time = 3
+
 class AIController:
     def __init__(self, player, game, depth=6):
         self.player = player  # -1 for White, 1 for Black
@@ -19,7 +21,7 @@ class AIController:
         depth = self.depth  # Adjust search depth as needed
 
         try:
-            pv = self.ai.get_best_move(board_state, player, depth)
+            pv = self.ai.get_best_move(board_state, player, depth, time)
             best_score = pv[0]
             from_row, from_col, to_row, to_col = pv[1][0] 
             print(f"Current eval: {best_score}")
