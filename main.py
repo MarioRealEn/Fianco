@@ -6,21 +6,14 @@ from controller import AIController
 
 
 def main():
-    board = np.array([
-[0, 0, 0, 0, 0, 0, 0, 0, 0],
-[0, 0, 0, 0, 0, 0, 0, 0, 0],
-[0, 0, 0, 0, 0, 0, 0, 1, 0],
-[0, 0, 0, 0, 0, 0, 0, 0, 0],
-[1, 0, 0, 0, 0, 0, 0, 0, 0],
-[0, 0, 0, -1, 0, 0, 1, 0, 0],
-[0, 0, 0, 1, 0, 0, 0, 0, 0],
-[0, 0, 0, -1, 0, 0, 0, 0, -1],
-[0, 0, 0, 0, 0, 0, 0, 0, 0],
-], dtype=np.int8)
-    fianco = game.FiancoGame(board)
+
+    fianco = game.FiancoGame()
+    
     # Example: Set Black player to be controlled by AI
+
     fianco.player_types[1] = 'ai20'
     # fianco.player_types[-1] = 'ai20'
+
     # Initialize controllers for AI players
     for player, p_type in fianco.player_types.items():
         print(p_type[0:2], p_type[2])
