@@ -1,7 +1,7 @@
 import numpy as np
 from fianco_brain import FiancoAI  # Import the Rust AI function
 
-time = 40
+time = 7
 
 class AIController:
     def __init__(self, player, game, depth=6):

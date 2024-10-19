@@ -493,7 +493,7 @@ class FiancoGame:
             self.draw_board()
             self.game_over = True
             text = self.large_font.render(f'{self.get_player_label(player)} Wins!', True, TEXT_COLOR)
-            text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            text_rect = text.get_rect(center=((WIDTH - MOVE_PANEL_WIDTH) // 2, HEIGHT // 2))
             self.screen.blit(text, text_rect)
             self.export_position()
             for player, p_type in self.player_types.items():

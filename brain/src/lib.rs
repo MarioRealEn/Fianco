@@ -38,6 +38,7 @@ struct TTEntry {
 }
 
 type TranspositionTable = HashMap<u64, TTEntry>;
+
 type Board = [[i8; COLS]; ROWS];
 
 #[pyclass]
@@ -170,12 +171,14 @@ impl FiancoAI {
 
         // println!("hash_history after negamax: {:?}", self.hash_history);
         }
-        println!("Time: {}", start_time.elapsed().as_secs_f64());
+        // println!("Time: {}", start_time.elapsed().as_secs_f64());
+
+        //** Just after finishing iterative deepening... **
 
         let loss_in_sight = depth_results.iter().any(|&(_, score, _)| player as i32 * score >= WIN_BY_TRIANGLE);
         let max_score_achieved = depth_results.iter().any(|&(_, score, _)| score == -player as i32 * MAX_SCORE);
 
-        // Find the highest depth where score != MIN_SCORE
+
         let mut best_pv = None;
         let mut pv_last_iter = Vec::new();
         for (_, score, pv_candidate) in depth_results.iter().rev() {
@@ -336,11 +339,13 @@ impl FiancoAI {
             // Make the move and update hash key
             let capture = self.make_move(board, player, m, hash_key);
 
-            
-
             let new_depth = if capture { depth } else { depth - 1 };
 
-            // Recursive call
+
+            // Recursive call...
+
+
+
             let result = self.negamax(
                 board,
                 new_depth,
@@ -669,8 +674,9 @@ fn evaluate_board(board: &Board, player_to_move: i8) -> i32 {
             }
         }
     }
-    // println!("Triangle for white: {}", length_triangle_white);
-    // println!("Triangle for black: {}", length_triangle_black);
+
+    // ** Rest of the code ** 
+
     if length_triangle_black != ROWS || length_triangle_white != ROWS {
         return (2 * (length_triangle_black - length_triangle_white) as i32 - player_to_move as i32) * WIN_BY_TRIANGLE;
     }
