@@ -1,11 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
-hidden_imports = collect_submodules('fianco_brain')
-datas = collect_data_files('fianco_brain')
+hidden_imports = collect_submodules('fianco_brain') + collect_submodules('numpy')
+datas = collect_data_files('fianco_brain') + collect_data_files('numpy')
 binaries = [
-    (r'env\Lib\site-packages\fianco_brain\fianco_brain.cp311-win_amd64.pyd', 'fianco_brain'),
+    (os.path.abspath(r'env\Lib\site-packages\fianco_brain\fianco_brain.cp311-win_amd64.pyd'), 'fianco_brain'),
 ]
 
 a = Analysis(
@@ -21,15 +22,18 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-pyz = PYZ(a.pure)
+pyz = PYZ(a.pure, a.zipped_data)
 
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,     # Include binaries
+    a.zipfiles,     # Include zip files
+    a.datas,        # Include data files
     [],
     exclude_binaries=False,
     name='main',
-    debug=True,
+    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
@@ -39,13 +43,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='main',
 )
