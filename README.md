@@ -1,25 +1,6 @@
 # Fianco
 
-A digital implementation of **Fianco** (rules below), developed as part of the *Intelligent Search and Games* course in the Master's in Artificial Intelligence at Maastricht University. The project was graded through a tournament in which each student’s AI competed against the others, where I secured **1st place**. The repository provides a fully playable Python version of the game, powered by a Rust-based AI backend, along with a precompiled `.exe` for Windows users who simply want to play.
-
----
-
-## Installation / Running
-
-### Option 1: Use the `.exe` (Windows only)
-1. Download `dist/fianco.exe` from the repo.  
-2. Run the .exe file. No Python installation required.
-
-### Option 2: Run from source
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/MarioRealEn/Fianco.git
-   cd fianco
-   python main.py
-
-⚠️ Note: Running from source is not recommended unless you also have Rust installed and are able to recompile the native library. The Python frontend depends on the Rust backend for the AI, so without recompiling the bindings the program will not work.
-
-I left the environment files in the repository just in case, although using them directly is not guaranteed to work across different setups.
+A digital implementation of **Fianco**, developed as part of the *Intelligent Search and Games* course in the Master's in Artificial Intelligence at Maastricht University. The project was graded through a tournament in which each student’s AI competed against the others, where I secured **1st place**. The repository provides a fully playable Python version of the game, powered by a Rust-based AI backend, along with a precompiled `.exe` for Windows users who simply want to play.
 
 ---
 
@@ -76,3 +57,73 @@ The AI for **Fianco** is based on the **Negamax algorithm**, enhanced with sever
   - Rewards pieces that move toward the sides of the board, reinforcing strong positional play.  
 
   - Detects **triangular structures** around each piece, identifying "passed" pieces even if they lie beyond the current search depth.
+
+---
+
+## Installation / Running
+
+### Option 1: Use the `.exe` (Windows only) (**Recommended**)
+1. Download `dist/fianco.exe` from the repo.  
+2. Run the .exe file. No Python installation required.
+
+### Option 2: Running From Source (Without the `.exe`)
+
+This project has a **Python frontend** and a **Rust-powered AI backend**. To run from source on a new machine you must:
+1) set up Python,  
+2) install the Rust toolchain, and  
+3) build the native Rust extension/library so Python can use it.
+
+#### 1) Prerequisites
+
+- **Python**: 3.11+
+- **Rust toolchain**: 1.81 install via [rustup](https://rustup.rs/)
+  - Windows users: install the **MSVC** toolchain and **Build Tools for Visual Studio** (C++ workload).
+- **Git**: to clone the repository
+
+> I left some environment files in the repo “just in case,” but you should still create a fresh environment on your machine.
+
+#### 2) Clone and create a virtual environment
+
+```bash
+git clone https://github.com/MarioRealEn/Fianco.git
+cd Fianco
+
+# Create & activate a virtual environment (choose one)
+
+# On Windows (PowerShell):
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# On macOS/Linux:
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+#### 3) Install Python dependencies
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+
+---
+
+#### 4) Build the Rust backend (PyO3 + Maturin)
+
+```bash
+python -m pip install maturin # should be installed already form the requirements
+cd brain          # adjust path if your Rust crate is elsewhere
+maturin develop --release
+cd ..
+```
+
+---
+
+#### 5) Run the game
+
+```bash
+python main.py
+```
+
+---

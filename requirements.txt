@@ -1,5 +1,9 @@
-# Fianco/requirements.txt
-
-pygame
-numpy
-maturin
+altgraph==0.17.4
+maturin==1.7.4
+numpy==2.1.1
+packaging==24.1
+pefile==2023.2.7
+pygame==2.6.1
+pyinstaller==6.11.0
+pyinstaller-hooks-contrib==2024.9
+pywin32-ctypes==0.2.3

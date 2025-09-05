@@ -2,7 +2,7 @@ fianco_export.txt
 slides.pptx
 
 # Rust
-/target/
+brain/target/
 
 # Python
 __pycache__/
