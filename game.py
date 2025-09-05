@@ -49,6 +49,7 @@ class FiancoGame:
         self.game_over = False
         self.font = pygame.font.SysFont('Arial', 18)
         self.large_font = pygame.font.SysFont('Arial', 24, bold=True)
+        self.huge_font = pygame.font.SysFont('Arial', 48, bold=True)
         self.paused = False
         self.undo_stack = []
         self.redo_stack = []
@@ -56,11 +57,16 @@ class FiancoGame:
         self.current_player = -1 # White: -1, Black: 1
         
 
-        # Player types: 'human' or 'ai'
-        self.player_types = {
-            -1: 'human',  # White player
-            1: 'human'    # Black player
-        }
+        # --- Setup screen state ---
+        self.setup_done = False
+        # controller: 'human' or 'ai'
+        self.player_types = { -1: 'human', 1: 'human' }
+        # ai mode per side: 'depth' or 'time'
+        self.ai_mode = { -1: 'depth', 1: 'depth' }
+        # selected depth per side (used now)
+        self.ai_depth = { -1: 4, 1: 4 }
+        # selected time per side in seconds (stored for later integration)
+        self.ai_time = { -1: 5, 1: 5 }
 
         # Controllers for AI players
         self.controllers = {
@@ -103,111 +109,14 @@ class FiancoGame:
             BUTTON_WIDTH * 2 + 10,  # Span two columns
             BUTTON_HEIGHT
         )
+        # Button to go back to setup menu and start a new game
+        self.setup_menu_button_rect = pygame.Rect(
+            button_x,
+            button_y + (BUTTON_HEIGHT + 10) * 3,  # below Play/Pause
+            BUTTON_WIDTH * 2 + 10,                # span two columns
+            BUTTON_HEIGHT
+        )
 
-        # if export_file:
-        #     # Read the export and get the values
-        #     with open(export_file, 'r') as f:
-        #         export_data = f.read()
-
-        #     # Extract the board state
-        #     board_state_pattern = re.compile(r'board\s*=\s*np\.array\(\s*\[(.*?)\],\s*dtype=np\.int8\)', re.DOTALL)
-        #     board_state_match = board_state_pattern.search(export_data)
-
-        #     if board_state_match:
-        #         board_state_str = board_state_match.group(1)
-        #         # Reconstruct the array string
-        #         board_state_str = '[' + board_state_str.strip() + ']'
-        #         # Safely evaluate the array string
-        #         board_list = ast.literal_eval(board_state_str)
-        #         # Convert to NumPy array
-        #         self.initial_board_state = np.array(board_list, dtype=np.int8)
-        #     else:
-        #         raise ValueError("Board state not found in export file.")
-
-        #     # Extract White Moves
-        #     white_moves_pattern = re.compile(r'White Moves:\n(.*?)\n\n', re.DOTALL)
-        #     white_moves_match = white_moves_pattern.search(export_data)
-
-        #     if white_moves_match:
-        #         white_moves_str = white_moves_match.group(1).strip()
-        #         self.white_moves = ast.literal_eval(white_moves_str)
-        #     else:
-        #         self.white_moves = []
-
-        #     # Extract Black Moves
-        #     black_moves_pattern = re.compile(r'Black Moves:\n(.*)', re.DOTALL)
-        #     black_moves_match = black_moves_pattern.search(export_data)
-
-        #     if black_moves_match:
-        #         black_moves_str = black_moves_match.group(1).strip()
-        #         self.black_moves = ast.literal_eval(black_moves_str)
-        #     else:
-        #         self.black_moves = []
-
-        #     # Initialize board state
-        #     self.board_state = self.initial_board_state.copy()
-
-        #     # Determine the current player
-        #     if len(self.white_moves) == len(self.black_moves):
-        #         self.current_player = -1  # White's turn
-        #     else:
-        #         self.current_player = 1   # Black's turn
-
-        #     from itertools import zip_longest
-
-        #     # Reconstruct the undo stack
-        #     self.undo_stack = []
-        #     self.board_state = self.initial_board_state.copy()
-        #     self.current_player = -1  # Assuming white starts
-        #     self.white_moves_applied = []
-        #     self.black_moves_applied = []
-
-        #     # Interleave the moves correctly
-        #     moves = []
-        #     white_moves_iter = iter(self.white_moves)
-        #     black_moves_iter = iter(self.black_moves)
-
-        #     while True:
-        #         white_move = next(white_moves_iter, None)
-        #         black_move = next(black_moves_iter, None)
-        #         if white_move is not None:
-        #             moves.append((-1, white_move))  # -1 for white
-        #         if black_move is not None:
-        #             moves.append((1, black_move))   # 1 for black
-        #         if white_move is None and black_move is None:
-        #             break
-
-        #     # Apply the moves
-        #     for player, move_str in moves:
-        #         # Parse the move
-        #         from_notation, to_notation = move_str.split('->')
-        #         from_row, from_col = self.notation_to_coord(from_notation)
-        #         to_row, to_col = self.notation_to_coord(to_notation)
-        #         # Save the current state before the move
-        #         self.undo_stack.append((
-        #             self.board_state.copy(),
-        #             self.current_player,
-        #             self.white_moves_applied.copy(),
-        #             self.black_moves_applied.copy()
-        #         ))
-        #         # Set current player to the player making the move
-        #         self.current_player = player
-        #         # Update move lists
-        #         if player == -1:
-        #             self.white_moves_applied.append(move_str)
-        #         else:
-        #             self.black_moves_applied.append(move_str)
-        #         # Make the move
-        #         self.make_move(from_row, from_col, to_row, to_col)
-        #         # Switch player
-        #         self.current_player *= -1  # Prepare for next move
-        #     self.undo_stack.append((
-        #         self.board_state.copy(),
-        #         self.current_player,
-        #         self.white_moves.copy(),
-        #         self.black_moves.copy()
-        #     ))
-        # else:
         self.initial_board_state = initial_board
         self.board_state = self.initial_board_state.copy()
         self.white_moves = []
@@ -310,7 +219,7 @@ class FiancoGame:
         # Column positions
         col1_x = MARGIN * 2 + COLS * SQUARE_SIZE + 10
         col2_x = col1_x + MOVE_PANEL_WIDTH // 2 - 10
-        start_y = MARGIN + (BUTTON_HEIGHT + 10) * 3 + 20
+        start_y = MARGIN + (BUTTON_HEIGHT + 10) * 4 + 20
         line_height = 20
         # Calculate how many moves can be displayed
         max_displayed_moves = (HEIGHT - start_y - line_height) // line_height
@@ -341,6 +250,8 @@ class FiancoGame:
         self.draw_button(self.reset_button_rect, 'Reset', mouse_pos)
         # Draw export button
         self.draw_button(self.export_button_rect, 'Export', mouse_pos)
+        # Draw setup/new game button
+        self.draw_button(self.setup_menu_button_rect, 'New Game', mouse_pos)
         # Draw play/pause button
         button_text = 'Play' if self.paused else 'Pause'
         self.draw_button(self.play_button_rect, button_text, mouse_pos)
@@ -500,9 +411,6 @@ class FiancoGame:
                 if p_type[0:2] == 'ai':
                     print('Player: ', player, ' TT size: ', self.controllers[player].ai.get_tt_size())
             pygame.display.flip()
-            pygame.time.wait(3000)
-            # pygame.quit()
-            # sys.exit()
 
     def select_piece(self, row, col):
         if self.board_state[row, col] == self.current_player:
@@ -516,8 +424,6 @@ class FiancoGame:
         self.draw_board()
 
     def handle_click(self, pos):
-        # if self.game_over:
-        #     return
         x, y = pos
         # Check if click is on play/pause button
         if self.play_button_rect.collidepoint(x, y):
@@ -539,6 +445,10 @@ class FiancoGame:
         # Check if click is on export button
         if self.export_button_rect.collidepoint(x, y):
             self.export_position()
+            return
+        # Check if click is on New Game / Setup button
+        if self.setup_menu_button_rect.collidepoint(x, y):
+            self.open_setup_menu()
             return
         # If it's AI's turn, ignore clicks
         if self.player_types[self.current_player][0:2] == 'ai':
@@ -577,6 +487,7 @@ class FiancoGame:
         self.undo_stack = []
         self.redo_stack = []
         self.game_over = False
+        self.paused = False
         self.draw_board()
 
     def export_position(self):
@@ -616,6 +527,10 @@ class FiancoGame:
         self.current_player *= -1
 
     def run_game(self):
+        if not self.setup_done:
+            self.run_setup_menu()
+            self.apply_setup()
+            self.reset_game()
         self.draw_board()
         while True:
             self.clock.tick(60)
@@ -631,6 +546,165 @@ class FiancoGame:
                     sys.exit()
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(pygame.mouse.get_pos())
+
+    def run_setup_menu(self):
+        """Initial screen to choose Human/AI, AI mode, and depth/time for both sides."""
+        def btn(rect, label, active=False):
+            pygame.draw.rect(self.screen, (70,130,180) if not active else (100,149,237), rect, border_radius=10)
+            text = self.font.render(label, True, (0,0,0))
+            self.screen.blit(text, text.get_rect(center=rect.center))
+
+        def draw_player_panel(x, y, who):
+            # Title
+            title = self.large_font.render(("White" if who == -1 else "Black"), True, (0,0,0))
+            self.screen.blit(title, (x, y))
+            yy = y + 36
+
+            # Controller type
+            tip = self.font.render("Controller:", True, (0,0,0))
+            self.screen.blit(tip, (x, yy))
+            human_rect = pygame.Rect(x+110, yy-6, 90, 28)
+            ai_rect    = pygame.Rect(x+210, yy-6, 90, 28)
+            btn(human_rect, "Human", self.player_types[who] == 'human')
+            btn(ai_rect,    "AI",    self.player_types[who] == 'ai')
+            click_targets.append(("ctrl", who, "human", human_rect))
+            click_targets.append(("ctrl", who, "ai",    ai_rect))
+            yy += 42
+
+            if self.player_types[who] == 'ai':
+                # Mode
+                tip = self.font.render("AI Mode:", True, (0,0,0))
+                self.screen.blit(tip, (x, yy))
+                mode_depth_rect = pygame.Rect(x+110, yy-6, 90, 28)
+                mode_time_rect  = pygame.Rect(x+210, yy-6, 90, 28)
+                btn(mode_depth_rect, "Depth", self.ai_mode[who] == 'depth')
+                btn(mode_time_rect,  "Time",  self.ai_mode[who] == 'time')
+                click_targets.append(("mode", who, "depth", mode_depth_rect))
+                click_targets.append(("mode", who, "time",  mode_time_rect))
+                yy += 42
+
+                if self.ai_mode[who] == 'depth':
+                    # Depth +/- selector
+                    tip = self.font.render("Depth:", True, (0,0,0))
+                    self.screen.blit(tip, (x, yy))
+                    minus_rect = pygame.Rect(x+110, yy-6, 28, 28)
+                    val_rect   = pygame.Rect(x+110+32, yy-6, 60, 28)
+                    plus_rect  = pygame.Rect(x+110+32+60, yy-6, 28, 28)
+                    btn(minus_rect, "−")
+                    btn(plus_rect,  "+")
+                    pygame.draw.rect(self.screen, (245,245,245), val_rect, border_radius=8)
+                    val_text = self.font.render(str(self.ai_depth[who]), True, (0,0,0))
+                    self.screen.blit(val_text, val_text.get_rect(center=val_rect.center))
+                    click_targets.append(("depth", who, "minus", minus_rect))
+                    click_targets.append(("depth", who, "plus",  plus_rect))
+                    yy += 42
+                    if self.ai_depth[who] >= 9:
+                        warn = self.font.render("Warning: depth ≥ 9 can get very slow. Maximum thinking time is limited to 60 seconds.", True, (200, 30, 30))
+                        self.screen.blit(warn, (x, yy))
+                        yy += 28
+                else:
+                    # Time +/- selector
+                    tip = self.font.render("Time (s):", True, (0,0,0))
+                    self.screen.blit(tip, (x, yy))
+                    minus_rect = pygame.Rect(x+110, yy-6, 28, 28)
+                    val_rect   = pygame.Rect(x+110+32, yy-6, 60, 28)
+                    plus_rect  = pygame.Rect(x+110+32+60, yy-6, 28, 28)
+                    btn(minus_rect, "−")
+                    btn(plus_rect,  "+")
+                    pygame.draw.rect(self.screen, (245,245,245), val_rect, border_radius=8)
+                    val_text = self.font.render(str(self.ai_time[who]), True, (0,0,0))
+                    self.screen.blit(val_text, val_text.get_rect(center=val_rect.center))
+                    click_targets.append(("time", who, "minus", minus_rect))
+                    click_targets.append(("time", who, "plus",  plus_rect))
+                    yy += 42
+
+        while not self.setup_done:
+            self.clock.tick(60)
+            self.screen.fill((230,230,230))
+            title = self.huge_font.render("Fianco", True, (0,0,0))
+            subtitle = self.large_font.render("New Game — Choose Controllers", True, (0,0,0))
+            self.screen.blit(title, (MARGIN, MARGIN//2 + 20))
+            self.screen.blit(subtitle, (MARGIN, MARGIN//2 + 100))
+
+            click_targets = []
+            left_x  = MARGIN
+            right_x = WIDTH//2 + 20
+            top_y   = MARGIN + 150
+
+            panel_w = WIDTH//2 - 40
+            panel_h = 250
+            pygame.draw.rect(self.screen, (255,255,255), pygame.Rect(left_x-10, top_y-20, panel_w, panel_h), border_radius=12)
+            pygame.draw.rect(self.screen, (255,255,255), pygame.Rect(right_x-10, top_y-20, panel_w, panel_h), border_radius=12)
+
+            draw_player_panel(left_x,  top_y, -1)
+            draw_player_panel(right_x, top_y,  1)
+
+            # Start button
+            start_rect = pygame.Rect((WIDTH-180)//2, top_y + panel_h + 20, 180, 40)
+            pygame.draw.rect(self.screen, (70,130,180), start_rect, border_radius=12)
+            start_text = self.large_font.render("Start Game", True, (0,0,0))
+            self.screen.blit(start_text, start_text.get_rect(center=start_rect.center))
+            click_targets.append(("start", 0, None, start_rect))
+
+            pygame.display.flip()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit(); sys.exit()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    mx, my = pygame.mouse.get_pos()
+                    for kind, who, val, rect in click_targets:
+                        if rect.collidepoint(mx, my):
+                            if kind == "ctrl":
+                                self.player_types[who] = val  # 'human' or 'ai'
+                            elif kind == "mode":
+                                self.ai_mode[who] = val       # 'depth' or 'time'
+                            elif kind == "depth":
+                                if val == "minus":
+                                    self.ai_depth[who] = max(1, self.ai_depth[who] - 1)
+                                else:
+                                    self.ai_depth[who] = min(20, self.ai_depth[who] + 1)
+                            elif kind == "time":
+                                if val == "minus":
+                                    self.ai_time[who] = max(1, self.ai_time[who] - 1)
+                                else:
+                                    self.ai_time[who] = min(300, self.ai_time[who] + 1)
+                            elif kind == "start":
+                                self.setup_done = True
+                                break
+
+    def apply_setup(self):
+        """Create controllers based on selected options. Depth is integrated; time is stored only."""
+        # Reset any existing controllers
+        self.controllers = { -1: None, 1: None }
+        for player in (-1, 1):
+            if self.player_types[player] == 'ai':
+                if self.ai_mode[player] == 'depth':
+                    depth = int(self.ai_depth[player])
+                    self.controllers[player] = AIController(player, self, depth=depth)
+                    print(f"Player {player} is AI (depth {depth})")
+                else:
+                    # time mode selected — not wired into AI yet, just store variable
+                    tsec = int(self.ai_time[player])
+                    # Choose a default depth for now so code keeps running
+                    self.controllers[player] = AIController(player, self, time=tsec)
+                    print(f"Player {player} is AI (time {tsec}s)")
+
+    def open_setup_menu(self):
+        """Pause the game, open setup menu, apply choices, and restart the match."""
+        # Pause and clear UI selections
+        self.paused = True
+        self.selected_piece = None
+        self.valid_moves = np.array([], dtype=np.int8).reshape(0, 4)
+
+        # Re-open setup
+        self.setup_done = False
+        self.run_setup_menu()
+        self.apply_setup()
+
+        # Start a fresh game with the selected options
+        self.reset_game()
+
 
 if __name__ == "__main__":
     game = FiancoGame()

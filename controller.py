@@ -1,13 +1,12 @@
 import numpy as np
 from fianco_brain import FiancoAI  # Import the Rust AI function
 
-time = 7
-
 class AIController:
-    def __init__(self, player, game, depth=6):
+    def __init__(self, player, game, depth=20, time=60): # Depth search will stop after 60 seconds, and time search will stop after depth 20 is reached.
         self.player = player  # -1 for White, 1 for Black
         self.game = game
         self.depth = depth
+        self.time = time
         self.ai = FiancoAI(player)
 
     def get_move(self, board_state):
@@ -21,7 +20,7 @@ class AIController:
         depth = self.depth  # Adjust search depth as needed
 
         try:
-            pv = self.ai.get_best_move(board_state, player, depth, time)
+            pv = self.ai.get_best_move(board_state, player, depth, self.time)
             best_score = pv[0]
             from_row, from_col, to_row, to_col = pv[1][0] 
             print(f"Current eval: {best_score}")
