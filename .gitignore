@@ -1,1 +1,24 @@
 fianco_export.txt
+slides.pptx
+
+# Rust
+/target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments
+env/
+.venv/
+venv/
+
+# Build artifacts
+build/
+*.egg-info/
+
+# IDEs
+.vscode/
+.idea/
