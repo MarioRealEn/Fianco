@@ -62,8 +62,9 @@ The AI for **Fianco** is based on the **Negamax algorithm**, enhanced with sever
 
 ## Installation / Running
 
-### Option 1: Use the `.exe` (Windows only) (**Recommended**)
-1. Download `dist/fianco.exe` from the repo.  
+### Option 1: Use the `.exe` (Recommended)
+> Windows only
+1. Download `dist/Fianco.exe` from the repo.  
 2. Run the .exe file. No Python installation required.
 
 ### Option 2: Running From Source (Without the `.exe`)
@@ -80,21 +81,24 @@ This project has a **Python frontend** and a **Rust-powered AI backend**. To run
   - Windows users: install the **MSVC** toolchain and **Build Tools for Visual Studio** (C++ workload).
 - **Git**: to clone the repository
 
-> I left some environment files in the repo “just in case,” but you should still create a fresh environment on your machine.
 
 #### 2) Clone and create a virtual environment
 
 ```bash
 git clone https://github.com/MarioRealEn/Fianco.git
 cd Fianco
+```
 
-# Create & activate a virtual environment (choose one)
+Create & activate a virtual environment (choose one):
 
-# On Windows (PowerShell):
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
+- On Windows (CMD):
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
 
-# On macOS/Linux:
+- On macOS/Linux:
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
