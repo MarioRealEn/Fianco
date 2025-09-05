@@ -17,6 +17,10 @@ A digital implementation of **Fianco** (rules below), developed as part of the *
    cd fianco
    python main.py
 
+⚠️ Note: Running from source is not recommended unless you also have Rust installed and are able to recompile the native library. The Python frontend depends on the Rust backend for the AI, so without recompiling the bindings the program will not work.
+
+I left the environment files in the repository just in case, although using them directly is not guaranteed to work across different setups.
+
 ---
 
 ## Rules of Fianco
@@ -70,5 +74,5 @@ The AI for **Fianco** is based on the **Negamax algorithm**, enhanced with sever
 - **Evaluation Function**:
 
   - Rewards pieces that move toward the sides of the board, reinforcing strong positional play.  
-  
+
   - Detects **triangular structures** around each piece, identifying "passed" pieces even if they lie beyond the current search depth.
